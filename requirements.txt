@@ -1,0 +1,9 @@
+python==3.12
+numpy
+scipy
+Pillow
+pydub
+playsound==1.2.2
+sounddevice
+tkinterdnd2
+ffmpeg
