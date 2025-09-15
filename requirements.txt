@@ -6,4 +6,4 @@ pydub
 playsound==1.2.2
 sounddevice
 tkinterdnd2
-ffmpeg
+ffmpeg 
