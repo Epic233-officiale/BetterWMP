@@ -2,6 +2,7 @@ import os
 import time
 import sys
 import json
+import ctypes
 import traceback
 import shutil
 import threading
@@ -17,9 +18,22 @@ from pydub.utils import which
 from playsound import playsound 
 import sounddevice as sd 
 from tkinterdnd2 import TkinterDnD, DND_FILES 
+import faulthandler
 
+FAULT_LOG = os.path.expandvars(r"%localappdata%\betterwmpconf\fault.log")
 CONF_DIR = os.path.expandvars(r"%localappdata%\betterwmpconf")
 INSTALL_POINTER = os.path.join(CONF_DIR, "installpointer.conf")
+fault_file = open(FAULT_LOG, "w")
+faulthandler.enable(file=fault_file)
+def excepthook(exc_type, exc_value, exc_traceback):
+    traceback.print_exception(exc_type, exc_value, exc_traceback, file=fault_file)
+    fault_file.flush()
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+sys.excepthook = excepthook
+
+def show_native_messagebox(title, message):
+    ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)
 def _read_install_dir():
     try:
         with open(INSTALL_POINTER, "r", encoding="utf-8") as f:
@@ -79,6 +93,7 @@ class AudioEngine:
         self.idx = 0
         self._playing = threading.Event()
         self._repeat = False
+        self._crash_simulation = False
         self._lock = threading.Lock()
         self._stream = sd.OutputStream(
             samplerate=self.sr,
@@ -141,6 +156,9 @@ class AudioEngine:
             self.right = right
             self.n = len(left)
             self.idx = 0
+        if self._crash_simulation:
+            self._stream.stop()
+            self._stream.close()
     def close(self):
         try:
             if self._stream.active:
@@ -247,6 +265,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.drag_target_time = 0.0
         self._pending_seek = None
         self._pending_play = False
+        self.current_wav = None
         self.audio: AudioEngine | None = None
         self.drop_target_register(DND_FILES)
         self.dnd_bind('<<Drop>>', self._on_file_drop)
@@ -300,7 +319,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.title(f"BetterWMP: {os.path.basename(self.filename.get())}")
         self.buffer_var = tk.IntVar(value=4096)
         self.buffer_label = tk.StringVar(value=f"{self.buffer_var.get()}  ▾")
-        tk.Label(top, text="Buffer", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(20, 2))
+        tk.Label(top, text="Buffer", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(10, 2))
         buf_menu = tk.OptionMenu(top, self.buffer_label, "")
         buf_menu.config(
             indicatoron=0, 
@@ -325,7 +344,7 @@ class BetterWMP(TkinterDnD.Tk):
                 value=opt,
                 command=lambda v=opt: self.set_buffer(v)
             )
-        tk.Label(top, text="Zero-pad", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(20, 2))
+        tk.Label(top, text="Zero-pad", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(10, 2))
         self.zp_label = tk.StringVar(value=f"{self.zp_var.get()}  ▾")
         zp_menu = tk.OptionMenu(top, self.zp_label, "")
         zp_menu.config(
@@ -351,7 +370,7 @@ class BetterWMP(TkinterDnD.Tk):
             value=opt,
             command=lambda v=opt: self.set_zp(v)
             )
-        tk.Label(top, text="Repeat", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(20, 5))
+        tk.Label(top, text="Repeat", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(10, 5))
         self.repeat_label = tk.StringVar(value=f"{'track once'}  ▾")
         repeat_options = ["track once", "playlist once", "track repeat", "playlist repeat"]
         repeat_menu = tk.OptionMenu(top, self.repeat_label, "")
@@ -419,7 +438,7 @@ class BetterWMP(TkinterDnD.Tk):
         scrollbar.config(command=self.playlist_listbox.yview)
         self.playlist_listbox.configure(activestyle="none")
         btns = [
-            ("SELECT", self._playlist_play_selected),
+            ("LOAD", self._playlist_play_selected),
             ("ADD", self._playlist_append),
             ("Insert", self._playlist_insert),
             ("Remove", self._playlist_remove),
@@ -448,6 +467,10 @@ class BetterWMP(TkinterDnD.Tk):
         self.bind("<space>", lambda e: self._toggle_play())
         self.bind("<Return>", lambda e: self._playlist_play_selected())
         self.bind("<Delete>", lambda e: self._playlist_remove())
+        self.bind("<Up>", lambda e: self._highlight_loaded())
+        self.bind("<Down>", lambda e: self._highlight_loaded())
+        #self.bind("<Control-Shift-c>", lambda e: self._simulate_crash())
+        #self.bind("<Control-Shift-C>", lambda e: self._simulate_crash())
         self.playlist_listbox.bind("<Double-Button-1>", self._on_double_click)
         self.playlist_listbox.bind("<Button-1>", self._on_single_click, add="+")
         self.playlist_listbox.bind("<ButtonPress-1>", self._on_single_click, add="+")
@@ -461,6 +484,9 @@ class BetterWMP(TkinterDnD.Tk):
             foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#505050"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"))
+    def _simulate_crash(self):
+        if self.audio is not None:
+            self.audio._crash_simulation = True
     def _change_skin_pointer(self):
         conf_dir = os.path.expandvars(r"%localappdata%\\betterwmpconf")
         pointer_path = os.path.join(conf_dir, "skinpointer.conf")
@@ -468,8 +494,8 @@ class BetterWMP(TkinterDnD.Tk):
             messagebox.showinfo("Skin Pointer", "skinpointer.conf not found.")
             return
         new_file = filedialog.askopenfilename(
-            title="Select Skin JSON",
-            filetypes=[("JSON Files", "*.json")],
+            title="Select Skin File",
+            filetypes=[("BetterWMP Skin Files", "*.bwmpskin")],
             initialdir=conf_dir
         )
         if not new_file:
@@ -486,7 +512,8 @@ class BetterWMP(TkinterDnD.Tk):
                 "listboxbg", "listboxfg",
                 "listboxselbg", "listboxselfg",
                 "dropdownbg", "dropdownfg",
-                "dropdownactivebg", "dropdownactivefg"
+                "dropdownactivebg", "dropdownactivefg",
+                "loadedfg", "doublefg"
             ]
         }
         try:
@@ -517,6 +544,7 @@ class BetterWMP(TkinterDnD.Tk):
         if bbox is None or not (bbox[1] <= event.y < bbox[1] + bbox[3]):
             lb.selection_clear(0, tk.END)
             return "break"
+        self.after(1, self._highlight_loaded)
     def _on_double_click(self, event):
         index = event.widget.nearest(event.y)
         bbox = event.widget.bbox(index)
@@ -524,6 +552,7 @@ class BetterWMP(TkinterDnD.Tk):
             self._playlist_append()
             return
         self._playlist_play_selected()
+        self._highlight_loaded()
     def set_buffer(self, val):
         self.buffer_var.set(val)
         self.buffer_label.set(f"{val}  ▾")
@@ -543,7 +572,7 @@ class BetterWMP(TkinterDnD.Tk):
             self.restart_btn.configure(state=tk.DISABLED)
     def _playlist_next(self):
         was_playing = self.audio.is_playing() if self.audio else False
-        idxs = [i for i, entry in enumerate(self.playlist) if entry['name'] == self.filename.get()]
+        idxs = [i for i, entry in enumerate(self.playlist) if entry['wav'] == getattr(self, "current_wav", None)]
         idx = idxs[0] if idxs else 0
         if len(self.playlist) == 0:
             return
@@ -561,9 +590,10 @@ class BetterWMP(TkinterDnD.Tk):
         else:
             self.audio.seek_seconds(0.0)
             self._set_play(False)
+        self._highlight_loaded()
     def _playlist_prev(self):
         was_playing = self.audio.is_playing() if self.audio else False
-        idxs = [i for i, entry in enumerate(self.playlist) if entry['name'] == self.filename.get()]
+        idxs = [i for i, entry in enumerate(self.playlist) if entry['wav'] == getattr(self, "current_wav", None)]
         idx = idxs[0] if idxs else 0
         if len(self.playlist) == 0:
             return
@@ -581,9 +611,10 @@ class BetterWMP(TkinterDnD.Tk):
         else:
             self.audio.seek_seconds(0.0)
             self._set_play(False)
+        self._highlight_loaded()
     def _playlist_restart(self):
         was_playing = self.audio.is_playing() if self.audio else False
-        idxs = [i for i, entry in enumerate(self.playlist) if entry['name'] == self.filename.get()]
+        idxs = [i for i, entry in enumerate(self.playlist) if entry['wav'] == getattr(self, "current_wav", None)]
         idx = idxs[0] if idxs else 0
         if 0 <= idx < len(self.playlist):
             entry = self.playlist[idx]
@@ -594,6 +625,7 @@ class BetterWMP(TkinterDnD.Tk):
             else:
                 self.audio.seek_seconds(0.0)
                 self._set_play(False)
+        self._highlight_loaded()
     def _on_file_drop(self, event):
         def parse_paths(data):
             paths = []
@@ -620,6 +652,7 @@ class BetterWMP(TkinterDnD.Tk):
         if valid_files:
             self._playlist_append_sysargv(valid_files)
             self._update_nav_buttons()
+        self._highlight_loaded()
     def _open_file(self, path):
         already_in_playlist = any(entry['orig'] == path for entry in self.playlist)
         if not already_in_playlist:
@@ -656,6 +689,33 @@ class BetterWMP(TkinterDnD.Tk):
         self.display_time = 0.0
         self.drag_target_time = 0.0
         self.is_dragging = False
+        self.current_wav = entry['wav']
+        self._highlight_loaded()
+    def _highlight_loaded(self):
+        for i in range(self.playlist_listbox.size()):
+            self.playlist_listbox.itemconfig(
+                i, fg=SkinInfo["tkinter"].get("listboxfg", "#ffffff")
+            )
+        if not hasattr(self, "current_wav"):
+            return
+        for i, entry in enumerate(self.playlist):
+            if entry['wav'] == self.current_wav:
+                self.playlist_listbox.itemconfig(
+                    i,
+                    fg=SkinInfo["tkinter"].get("loadedfg", "#fcb1ff")
+                )
+                break
+        selected = self.playlist_listbox.curselection()
+        if selected:
+            idx = selected[0]
+            if self.playlist[idx]['wav'] == self.current_wav:
+                self.playlist_listbox.config(
+                    selectforeground=SkinInfo["tkinter"].get("doublefg", "#ffc1f6")
+                )
+            else:
+                self.playlist_listbox.config(
+                    selectforeground=SkinInfo["tkinter"].get("listboxselfg", "#ffffff")
+                )
     def _convert_and_play(self, input_path):
         output_path = os.path.expandvars(r"%localappdata%\\betterwmpfiles\\temp.wav")
         try:
@@ -725,6 +785,7 @@ class BetterWMP(TkinterDnD.Tk):
             if self.playlist:
                 self.playlist_listbox.selection_set(min(idx[0], len(self.playlist) - 1))
         self._update_nav_buttons()
+        self._highlight_loaded()
     def _remove_file_from_playlist(self, idx):
         entry = self.playlist.pop(idx)
         self.playlist_listbox.delete(idx)
@@ -732,8 +793,7 @@ class BetterWMP(TkinterDnD.Tk):
             os.remove(entry['wav'])
         except Exception as e:
             print(f"Error removing file: {e}")
-        current_file = self.filename.get()
-        if current_file == entry['name']:
+        if entry['wav'] == getattr(self, "current_wav", None):
             if self.audio is not None:
                 self.audio.close()
                 self.audio = None
@@ -753,6 +813,7 @@ class BetterWMP(TkinterDnD.Tk):
             self.play_btn.configure(text="▶", state="disabled")
             self.title("BetterWMP: <No file>")
             self._update_nav_buttons()
+        self._highlight_loaded()
     def _playlist_append(self):
         files = filedialog.askopenfilenames(title="Append files", filetypes=[("Audio Files", "*.wav *.mp3 *.ogg *.flac *.aac *.m4a *.wma *.opus")])
         if not files:
@@ -766,6 +827,7 @@ class BetterWMP(TkinterDnD.Tk):
             self.after(0, self.close_progress_window)
         threading.Thread(target=worker, daemon=True).start()
         self._update_nav_buttons()
+        self._highlight_loaded()
     def _playlist_append_sysargv(self, files):
         if not files:
             return
@@ -778,6 +840,7 @@ class BetterWMP(TkinterDnD.Tk):
             self.after(0, self.close_progress_window)
         threading.Thread(target=worker, daemon=True).start()
         self._update_nav_buttons()
+        self._highlight_loaded()
     def _playlist_insert(self):
         files = filedialog.askopenfilenames(
             title="Insert files",
@@ -816,6 +879,7 @@ class BetterWMP(TkinterDnD.Tk):
         except Exception as e:
             print(e)
         self._update_nav_buttons()
+        self._highlight_loaded()
     def _playlist_up(self):
         idx = self.playlist_listbox.curselection()
         if idx and idx[0] > 0:
@@ -826,6 +890,7 @@ class BetterWMP(TkinterDnD.Tk):
                 self.playlist_listbox.insert(tk.END, entry['name'])
             self.playlist_listbox.selection_set(i-1)
             self.playlist_listbox.see(i-1)
+        self._highlight_loaded()
     def _playlist_down(self):
         idx = self.playlist_listbox.curselection()
         if idx and idx[0] < len(self.playlist) - 1:
@@ -836,6 +901,7 @@ class BetterWMP(TkinterDnD.Tk):
                 self.playlist_listbox.insert(tk.END, entry['name'])
             self.playlist_listbox.selection_set(i+1)
             self.playlist_listbox.see(i+1)
+        self._highlight_loaded()
     def _playlist_play_selected(self):
         was_playing = self.audio.is_playing() if self.audio else False
         idx = self.playlist_listbox.curselection()
@@ -846,6 +912,7 @@ class BetterWMP(TkinterDnD.Tk):
             self.play_btn.configure(state=tk.NORMAL)
         if was_playing:
             self._set_play(True)
+        self._highlight_loaded()
     def _playlist_shuffle(self):
         import random
         idxs = self.playlist_listbox.curselection()
@@ -869,9 +936,8 @@ class BetterWMP(TkinterDnD.Tk):
             for entry in self.playlist:
                 self.playlist_listbox.insert(tk.END, entry['name'])
             self.playlist_listbox.selection_clear(0, tk.END)
-            if self.playlist:
-                self.playlist_listbox.selection_set(0)
         self._update_nav_buttons()
+        self._highlight_loaded()
     def _playlist_clear(self):
         if self.audio is not None:
             self.audio.close()
@@ -890,12 +956,13 @@ class BetterWMP(TkinterDnD.Tk):
         self.viz.delete("all")
         self.play_btn.configure(state="disabled")
         self.title("BetterWMP: <No file>")
+        self._highlight_loaded()
     def _on_repeat_mode_change(self, val):
         self.repeat_mode.set(val)
         self.repeat_label.set(f"{val}  ▾")
     def _handle_track_end(self):
         mode = self.repeat_mode.get()
-        idxs = [i for i, entry in enumerate(self.playlist) if entry['name'] == self.filename.get()]
+        idxs = [i for i, entry in enumerate(self.playlist) if entry['wav'] == getattr(self, "current_wav", None)]
         if not idxs:
             idx = 0
         else:
@@ -947,6 +1014,7 @@ class BetterWMP(TkinterDnD.Tk):
                 if self.audio is not None:
                     self.audio.seek_seconds(0.0)
                 self._pending_play = True
+        self._highlight_loaded()
     def _format_time(self, seconds: float) -> str:
         h = int(seconds // 3600)
         m = int((seconds % 3600) // 60)
@@ -988,12 +1056,10 @@ class BetterWMP(TkinterDnD.Tk):
         self.is_dragging = True
         self.play_btn.configure(state="disabled")
         self.drag_target_time = self._mouse_x_to_time(e.x)
-
     def _on_prog_motion(self, e):
         if self.audio is None or not self.is_dragging:
             return
         self.drag_target_time = self._mouse_x_to_time(e.x)
-
     def _on_prog_release(self, e):
         if self.audio is None or not self.is_dragging:
             return
@@ -1092,6 +1158,7 @@ class BetterWMP(TkinterDnD.Tk):
                 self._draw_spectrum(freqs, mid_db, side_db)
         except Exception as e:
             traceback.print_exc()
+            ctypes.windll.user32.MessageBoxW(0, f"An error occurred in the update loop:\n{e}", "Error from BetterWMP", 0x10)
             print(f"Error in update loop: {e}")
             pass
         t1 = time.perf_counter()
@@ -1111,8 +1178,14 @@ class BetterWMP(TkinterDnD.Tk):
 def setup_skin_json():
     conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
     os.makedirs(conf_dir, exist_ok=True)
-    skin_path = os.path.join(conf_dir, "default.json")
+    skin_path = os.path.join(conf_dir, "default.bwmpskin")
+    pointer_path = os.path.join(conf_dir, "skinpointer.conf")
+    if not os.path.isfile(pointer_path):
+        with open(pointer_path, "w", encoding="utf-8") as pf:
+            os.remove(skin_path)
+            pf.write("default.bwmpskin")
     if not os.path.isfile(skin_path):
+        print("Reset")
         skin_data = {
                     "fft":
                     {
@@ -1144,6 +1217,8 @@ def setup_skin_json():
                         "listboxfg": "#ffffff",
                         "listboxselbg": "#582e70",
                         "listboxselfg": "#ffffff",
+                        "loadedfg": "#fca4ff",
+                        "doublefg": "#ffc1f6",
                         "dropdownbg": "#555555",
                         "dropdownfg": "#ffffff",
                         "dropdownactivebg": "#685868",
@@ -1152,10 +1227,9 @@ def setup_skin_json():
                 }
         with open(skin_path, "w", encoding="utf-8") as f:
             json.dump(skin_data, f, indent=4)
-    pointer_path = os.path.join(conf_dir, "skinpointer.conf")
     if not os.path.isfile(pointer_path):
         with open(pointer_path, "w", encoding="utf-8") as pf:
-            pf.write("default.json")
+            pf.write("default.bwmpskin")
 
 def get_skin():
     conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
@@ -1169,11 +1243,26 @@ def get_skin():
         return {}
     with open(skin_path, "r", encoding="utf-8") as sf:
         return json.load(sf)
-
-if __name__ == "__main__":
+    
+SkinInfo = {}
+app = None
+def main():
+    global SkinInfo, app
     setup_skin_json()
     SkinInfo = get_skin()
-    app = BetterWMP()
+    app = None
+    try:
+        app = BetterWMP()
+    except Exception as e:
+        if 'tkinter' in str(e).lower():
+            ctypes.windll.user32.MessageBoxW(0,"The skin configuration is probably corrupted.\nSkin pointer will reset upon next launch.", "Error from BetterWMP", 0x10)
+            pointer = r"%localappdata%\betterwmpconf\skinpointer.conf"
+            os.remove(os.path.expandvars(pointer))
+            sys.exit(1)
+        else:
+            traceback.print_exc()
+            show_native_messagebox("Error from BetterWMP", f"An error occurred:\n{e}")
+            sys.exit(1)
     if len(sys.argv) > 1:
         input_files = [f for f in sys.argv[1:] if os.path.isfile(f) and f.lower().endswith((".wav", ".mp3", ".ogg", ".flac", ".aac", ".m4a", ".wma", ".opus"))]
         if input_files:
@@ -1183,4 +1272,15 @@ if __name__ == "__main__":
             app.playlist_listbox.selection_set(0)
             app._open_file(input_files[0])
             app._update_nav_buttons()
-    app.mainloop()
+    try:
+        app.mainloop()
+    except Exception as e:
+        with open(FAULT_LOG, "a") as lf:
+            traceback.print_exc(file=lf)
+        with open(FAULT_LOG, "r") as lf:
+            fault_text = lf.read()
+        show_native_messagebox("BetterWMP has crashed", fault_text)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

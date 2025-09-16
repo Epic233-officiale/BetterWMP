@@ -1,11 +1,12 @@
-## BetterWMP v1.3.4
+## BetterWMP v1.3.5
 
 Features:
 - Supports most audio filetypes and codecs and opens them with low latency
 - Realtime FFT spectrum visualization
-- Full Playback & Playlist features support
+- Full Playback & Playlist features
 - Skin customization through JSON editing
-- Drag and drop to append new files, right click files to open with BetterWMP
+- Drag and drop to append new files
+- Context menu support
 
 ---
 ### Download
