@@ -1393,14 +1393,8 @@ def main():
             show_native_messagebox("Error from BetterWMP", f"An error occurred:\n{e}")
             sys.exit(1)
     if len(sys.argv) > 1:
-        input_files = [f for f in sys.argv[1:] if os.path.isfile(f) and f.lower().endswith((".wav", ".mp3", ".ogg", ".flac", ".aac", ".m4a", ".wma", ".opus"))]
-        if input_files:
-            for f in input_files:
-                app.add_file_to_playlist(f)
-            app.playlist_listbox.selection_clear(0, tk.END)
-            app.playlist_listbox.selection_set(0)
-            app._open_file(input_files[0])
-            app._update_nav_buttons()
+        files = sys.argv[1:]
+        app._playlist_append_sysargv(files)
     try:
         app.mainloop()
     except Exception as e:
