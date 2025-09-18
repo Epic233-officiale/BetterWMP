@@ -5,6 +5,7 @@ import json
 import ctypes
 import traceback
 import shutil
+import random
 import threading
 import subprocess
 import tkinter as tk
@@ -17,7 +18,7 @@ from PIL import Image, ImageTk
 from pydub.utils import which 
 from playsound import playsound 
 import sounddevice as sd 
-from tkinterdnd2 import TkinterDnD, DND_FILES 
+from tkinterdnd2 import TkinterDnD, DND_FILES
 import faulthandler
 
 FAULT_LOG = os.path.expandvars(r"%localappdata%\betterwmpconf\fault.log")
@@ -29,9 +30,7 @@ def excepthook(exc_type, exc_value, exc_traceback):
     traceback.print_exception(exc_type, exc_value, exc_traceback, file=fault_file)
     fault_file.flush()
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
-
 sys.excepthook = excepthook
-
 def show_native_messagebox(title, message):
     ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)
 def _read_install_dir():
@@ -40,6 +39,10 @@ def _read_install_dir():
             p = f.read().strip().strip('"')
             return p if p else None
     except Exception as e:
+        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+            lf.write("Read failed:\n")
+            traceback.print_exc(file=lf)
+            lf.flush()
         return None
 def _candidate_ffmpeg_paths():
     install_dir = _read_install_dir()
@@ -58,17 +61,29 @@ ffmpeg_exe = resolve_ffmpeg()
 from pydub import AudioSegment
 AudioSegment.converter = ffmpeg_exe or which("ffmpeg")
 if AudioSegment.converter is None:
-    import tkinter as tk
-    from tkinter import messagebox
-    root = tk.Tk(); root.withdraw()
-    messagebox.showwarning(
+    show_native_messagebox(
         "FFmpeg Not Found",
         "FFmpeg was not found. Non-WAV files will not open.\n"
-        "Reinstall BetterWMP to solve this issue."
+        "Reinstall the newest version of BetterWMP to solve this issue."
     )
-    root.destroy()
+    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+        lf.write("FFmpeg not found at startup.\n")
+        lf.flush()
 else:
     print(AudioSegment.converter)
+    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+        lf.write(f"Using FFmpeg at: {AudioSegment.converter}\n")
+        lf.flush()
+def tkinter_exception_handler(self, exc, val, tb):
+    if EmergencyStop:
+        raise exc.with_traceback(tb)
+    print("Tkinter exception handler called!")
+    print(f"Exception: {exc.__name__}: {val}")
+    traceback.print_tb(tb)
+    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+        lf.write("Tkinter exception:\n")
+        traceback.print_exception(exc, val, tb, file=lf)
+        lf.flush()
 def to_float32(audio):
     if audio.dtype == np.float32:
         return audio
@@ -82,7 +97,7 @@ def to_float32(audio):
     maxv = max(1.0, np.max(np.abs(audio)))
     return audio / maxv
 
-ICON = "data:image/x-icon;base64,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/f/w9/3/8Pf9//D3/f/w9/3/IyQl/+Lk4f/9//n/+fHn/97Vxv/8//v//f//////////////UjFE/1IxRP8eEhn/UjFE/1IxRP9SMUT/UjFE/wAAAP/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/z9Xa//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3///////7+/v/+/v7//f39////////////AAAA/wAAAP9SMUT/UjFE/y4cJv9SMUT/UjFE/1IxRP9SMUT/AAAA//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9/8nP1P///////////////////////////wAAAP8AAAD//////1IxRP9SMUT/Sy0+/1IxRP9SMUT/UjFE/1IxRP8EAwT/8Pf9/+/2/P8BAQH/tbq+//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9/3yAg/8AAAD/8Pf9//D3/f9SVVj/OyQx////////////////////////////AAAA////////////UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/yEUG//w9/3/8Pf9/wAAAP8jJCX/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/2N7j/woLC//w9/3/AAAA/1IxRP9SMUT///////////////////////////8AAAD///////////9SMUT/UjFE/1IxRP88JDL/UjFE/1IxRP9SMUT/Ty9C/0tNT//w9/3/8Pf9//D3/f/w9/3/6O/1//D3/f/w9/3/8Pf9//D3/f/w9/3/ERES/wcHB/8FBQX/UjFE/08vQf///////////wAAAP///////////wAAAP///////////xgUFv9SMUT/UjFE/wAAAP9SMUT/UjFE/1IxRP9SMUT/Ty9C/wcEBv/w9/3/8Pf9/wAAAP9SMUT/UjFE/1EwQ/9QMEL/vcPH//D3/f/w9/3/8Pf9/w0ODv9SMUT/Mh4q////////////AAAA/wAAAP//////AAAA////////////EhIS/1IxRP9SMUT/JRYf/1IxRP9SMUT/UjFE/1IxRP8MBwr/UjFE/+Xr8f9jZmj/UjFE/1IxRP9SMUT/UjFE/1IxRP8BAQH/8Pf9/2NmaP/w9/3/AAAA/1IxRP8AAAD//////wAAAP//////AAAA//////8AAAD////////////9/f3/UjFE/1IxRP9SMUT/Sy0+/1IxRP9SMUT/UjFE/wAAAP9SMUT/AAAA//D3/f9RMUP/UjFE/1IxRP9SMUT/UjFE/1ExQ//w9/3/8Pf9/7vBxf8AAAD/UjFE/wEBAf8AAAD/AAAA//////8AAAD//f39/wAAAP////////////////8KCQn/UjFE/1IxRP8FBAT/UjFE/1IxRP9SMUT/NB8r/1IxRP9SMUT/7vX7/zwkMv9SMUT/UjFE/1IxRP9SMUT/UjFE/ykqK//w9/3/CwoL/1IxRP9SMUT/v7+//wAAAP8AAAD//////wQEBP8AAAD/AAAA/////////////////1NTU/9SMUT/UjFE/1IxRP9NLj//UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD/FBIX/1IxRP9SMUT/UjFE/1IxRP9SMUT/AgIC//D3/f9QMEP/UjFE/1IxRP///////////////////////////wAAAP8AAAD//////////////////////x8XG/9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD/UjFE/1IxRP9SMUT/UjFE/1IxRP8pGCL/AAAA/1IxRP9SMUT/EQwP////////////////////////////AAAA/wAAAP//////////////////////MDAw/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/0wtP/9QMEL/UjFE/1IxRP8DAwP///////////////////////////8AAAD/AAAA////////////////////////////Ihkf/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE///////////////////////////////////////19fX////////////////////////////c3Nz/UTFD/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD///////////////////////////////////////////////////////////////////////////9HR0f/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/SCs8//////////////////////////////////////////////////////////////////////////////////////8FBQX/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/z8mNP9cXFz///////////////////////////////////////////////////////////////////////////////////////////9vb2//NSUt/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/zgiL/8GBgb////////////////////////////////////////////////////////////////////////////////////////////////////////////9////AAAA/ykZIv9SMUT/UjFE/1IxRP9SMUT/Sy0+/w0LDP8kJCT//f/9//////////////////////////////7///3//f/////////////////////////////+////////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+ICON = r"data:image/x-icon;base64,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/f/w9/3/8Pf9//D3/f/w9/3/IyQl/+Lk4f/9//n/+fHn/97Vxv/8//v//f//////////////UjFE/1IxRP8eEhn/UjFE/1IxRP9SMUT/UjFE/wAAAP/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/z9Xa//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3///////7+/v/+/v7//f39////////////AAAA/wAAAP9SMUT/UjFE/y4cJv9SMUT/UjFE/1IxRP9SMUT/AAAA//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9/8nP1P///////////////////////////wAAAP8AAAD//////1IxRP9SMUT/Sy0+/1IxRP9SMUT/UjFE/1IxRP8EAwT/8Pf9/+/2/P8BAQH/tbq+//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9/3yAg/8AAAD/8Pf9//D3/f9SVVj/OyQx////////////////////////////AAAA////////////UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/yEUG//w9/3/8Pf9/wAAAP8jJCX/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/2N7j/woLC//w9/3/AAAA/1IxRP9SMUT///////////////////////////8AAAD///////////9SMUT/UjFE/1IxRP88JDL/UjFE/1IxRP9SMUT/Ty9C/0tNT//w9/3/8Pf9//D3/f/w9/3/6O/1//D3/f/w9/3/8Pf9//D3/f/w9/3/ERES/wcHB/8FBQX/UjFE/08vQf///////////wAAAP///////////wAAAP///////////xgUFv9SMUT/UjFE/wAAAP9SMUT/UjFE/1IxRP9SMUT/Ty9C/wcEBv/w9/3/8Pf9/wAAAP9SMUT/UjFE/1EwQ/9QMEL/vcPH//D3/f/w9/3/8Pf9/w0ODv9SMUT/Mh4q////////////AAAA/wAAAP//////AAAA////////////EhIS/1IxRP9SMUT/JRYf/1IxRP9SMUT/UjFE/1IxRP8MBwr/UjFE/+Xr8f9jZmj/UjFE/1IxRP9SMUT/UjFE/1IxRP8BAQH/8Pf9/2NmaP/w9/3/AAAA/1IxRP8AAAD//////wAAAP//////AAAA//////8AAAD////////////9/f3/UjFE/1IxRP9SMUT/Sy0+/1IxRP9SMUT/UjFE/wAAAP9SMUT/AAAA//D3/f9RMUP/UjFE/1IxRP9SMUT/UjFE/1ExQ//w9/3/8Pf9/7vBxf8AAAD/UjFE/wEBAf8AAAD/AAAA//////8AAAD//f39/wAAAP////////////////8KCQn/UjFE/1IxRP8FBAT/UjFE/1IxRP9SMUT/NB8r/1IxRP9SMUT/7vX7/zwkMv9SMUT/UjFE/1IxRP9SMUT/UjFE/ykqK//w9/3/CwoL/1IxRP9SMUT/v7+//wAAAP8AAAD//////wQEBP8AAAD/AAAA/////////////////1NTU/9SMUT/UjFE/1IxRP9NLj//UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD/FBIX/1IxRP9SMUT/UjFE/1IxRP9SMUT/AgIC//D3/f9QMEP/UjFE/1IxRP///////////////////////////wAAAP8AAAD//////////////////////x8XG/9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD/UjFE/1IxRP9SMUT/UjFE/1IxRP8pGCL/AAAA/1IxRP9SMUT/EQwP////////////////////////////AAAA/wAAAP//////////////////////MDAw/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/0wtP/9QMEL/UjFE/1IxRP8DAwP///////////////////////////8AAAD/AAAA////////////////////////////Ihkf/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE///////////////////////////////////////19fX////////////////////////////c3Nz/UTFD/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD///////////////////////////////////////////////////////////////////////////9HR0f/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/SCs8//////////////////////////////////////////////////////////////////////////////////////8FBQX/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/z8mNP9cXFz///////////////////////////////////////////////////////////////////////////////////////////9vb2//NSUt/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/zgiL/8GBgb////////////////////////////////////////////////////////////////////////////////////////////////////////////9////AAAA/ykZIv9SMUT/UjFE/1IxRP9SMUT/Sy0+/w0LDP8kJCT//f/9//////////////////////////////7///3//f/////////////////////////////+////////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 class AudioEngine:
     def __init__(self, sr=44100):
@@ -92,7 +107,6 @@ class AudioEngine:
         self.n = 1
         self.idx = 0
         self._playing = threading.Event()
-        self._repeat = False
         self._crash_simulation = False
         self._lock = threading.Lock()
         self._stream = sd.OutputStream(
@@ -131,6 +145,10 @@ class AudioEngine:
                     self.on_track_end()
                 except Exception as e:
                     print("on_track_end error:", e)
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("Track end callback failed:\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
     def play(self): self._playing.set()
     def pause(self): self._playing.clear()
     def toggle_play(self):
@@ -147,6 +165,7 @@ class AudioEngine:
     def duration_seconds(self):
         return self.n / float(self.sr)
     def load_track(self, sr, left, right):
+        global EmergencyStop
         left = left.astype(np.float32, copy=False)
         right = right.astype(np.float32, copy=False)
         self.pause()
@@ -159,6 +178,7 @@ class AudioEngine:
         if self._crash_simulation:
             self._stream.stop()
             self._stream.close()
+            time.sleep(0.016)
     def close(self):
         try:
             if self._stream.active:
@@ -166,6 +186,10 @@ class AudioEngine:
             self._stream.close()
         except Exception as e:
             print("Error closing AudioEngine:", e)
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("AudioEngine close failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
         finally:
             self._playing.clear()
             self.idx = 0
@@ -208,30 +232,29 @@ class Visualizer:
         mags = np.abs(fft_result) * (2.0 / max(1, n))
         db = 20.0 * np.log10(mags + 1e-12)
         return freqs, db
-
-def spectrum_to_polyline(freqs, db_vals, fmin, fmax, db_min, db_max, width, height):
-    freqs = np.maximum(freqs, 1e-6)
-    logf = np.log10(freqs)
-    log_fmin = np.log10(max(fmin, 1e-6))
-    log_fmax = np.log10(max(fmax, fmin + 1))
-    x_float = (logf - log_fmin) / (log_fmax - log_fmin)
-    x_float = np.clip(x_float, 0.0, 1.0)
-    x_pix = (x_float * (width - 1)).astype(int)
-    db_vals = np.clip(db_vals, db_min, db_max)
-    y_float = (db_vals - db_min) / (db_max - db_min)
-    y_pix = (1.0 - y_float) * (height - 1)
-    y_pix = y_pix.astype(int)
-    max_db_per_x = {}
-    for x, y, dbv in zip(x_pix, y_pix, db_vals):
-        prev = max_db_per_x.get(x)
-        if prev is None or dbv > prev[1]:
-            max_db_per_x[x] = (y, dbv)
-    points = []
-    for x in range(0, width):
-        if x in max_db_per_x:
-            y = max_db_per_x[x][0]
-            points.append((x, int(y)))
-    return points
+    def spectrum_to_polyline(self, freqs, db_vals, fmin, fmax, db_min, db_max, width, height):
+        freqs = np.maximum(freqs, 1e-6)
+        logf = np.log10(freqs)
+        log_fmin = np.log10(max(fmin, 1e-6))
+        log_fmax = np.log10(max(fmax, fmin + 1))
+        x_float = (logf - log_fmin) / (log_fmax - log_fmin)
+        x_float = np.clip(x_float, 0.0, 1.0)
+        x_pix = (x_float * (width - 1)).astype(int)
+        db_vals = np.clip(db_vals, db_min, db_max)
+        y_float = (db_vals - db_min) / (db_max - db_min)
+        y_pix = (1.0 - y_float) * (height - 1)
+        y_pix = y_pix.astype(int)
+        max_db_per_x = {}
+        for x, y, dbv in zip(x_pix, y_pix, db_vals):
+            prev = max_db_per_x.get(x)
+            if prev is None or dbv > prev[1]:
+                max_db_per_x[x] = (y, dbv)
+        points = []
+        for x in range(0, width):
+            if x in max_db_per_x:
+                y = max_db_per_x[x][0]
+                points.append((x, int(y)))
+        return points
 
 class BetterWMP(TkinterDnD.Tk):
     def __init__(self):
@@ -256,7 +279,7 @@ class BetterWMP(TkinterDnD.Tk):
             foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"))
         self.audio: AudioEngine | None = None
         self.vis: Visualizer | None = None
-        self.filename = tk.StringVar(value="<No file>")
+        self.displayname = tk.StringVar(value="<No file>")
         self.buffer_var = tk.IntVar(value=4096)
         self.zp_var = tk.IntVar(value=1)
         self.is_dragging = False
@@ -287,8 +310,13 @@ class BetterWMP(TkinterDnD.Tk):
         try:
             return (self.state() == 'iconic') or (not self.winfo_viewable())
         except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Read minimization state failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             return False
     def _build_ui(self):
+        global DEBUG
         tk_colors = SkinInfo.get("tkinter", {})
         top = tk.Frame(self, bg=tk_colors.get("bg", "#1a1a1a"))
         top.pack(side=tk.TOP, fill=tk.X, padx=5, pady=8)
@@ -316,7 +344,7 @@ class BetterWMP(TkinterDnD.Tk):
         )
         self.play_btn.pack(side=tk.LEFT, padx=(5, 0))
         self.play_btn.state(["disabled"])
-        self.title(f"BetterWMP: {os.path.basename(self.filename.get())}")
+        self.title(f"BetterWMP: {self.displayname.get()}")
         self.buffer_var = tk.IntVar(value=4096)
         self.buffer_label = tk.StringVar(value=f"{self.buffer_var.get()}  ▾")
         tk.Label(top, text="Buffer", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(10, 2))
@@ -469,8 +497,13 @@ class BetterWMP(TkinterDnD.Tk):
         self.bind("<Delete>", lambda e: self._playlist_remove())
         self.bind("<Up>", lambda e: self._highlight_loaded())
         self.bind("<Down>", lambda e: self._highlight_loaded())
-        #self.bind("<Control-Shift-c>", lambda e: self._simulate_crash())
-        #self.bind("<Control-Shift-C>", lambda e: self._simulate_crash())
+        if DEBUG:
+            self.bind("<Control-Shift-Alt-c>", lambda e: self._simulate_crash())
+            self.bind("<Control-Shift-Alt-C>", lambda e: self._simulate_crash())
+            self.bind("<Control-Shift-Alt-x>", lambda e: self._simulate_tkinterlevel_crash())
+            self.bind("<Control-Shift-Alt-X>", lambda e: self._simulate_tkinterlevel_crash())
+            self.bind("<Control-Shift-Alt-z>", lambda e: self._call_emergency_stop())
+            self.bind("<Control-Shift-Alt-Z>", lambda e: self._call_emergency_stop())
         self.playlist_listbox.bind("<Double-Button-1>", self._on_double_click)
         self.playlist_listbox.bind("<Button-1>", self._on_single_click, add="+")
         self.playlist_listbox.bind("<ButtonPress-1>", self._on_single_click, add="+")
@@ -484,9 +517,44 @@ class BetterWMP(TkinterDnD.Tk):
             foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#505050"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"))
+    def _call_emergency_stop(self):
+        global EmergencyStop
+        response = ctypes.windll.user32.MessageBoxW(
+            0,
+            "This will initate an emergency stop.\nIf you continue, the app will crash.",
+            "Continue",
+            0x04 | 0x30
+        )
+        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+            lf.write("NOT MY FAULT\n")
+            lf.flush()
+        if response == 6:
+            EmergencyStop = True
     def _simulate_crash(self):
-        if self.audio is not None:
-            self.audio._crash_simulation = True
+        response = ctypes.windll.user32.MessageBoxW(
+            0,
+            "This will initiate a PortAudio crash.\nIf you continue, the app will crash upon track-end handling. You can undo by clearing the playlist.",
+            "Continue",
+            0x04 | 0x30
+        )
+        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+            lf.write("NOT MY FAULT\n")
+            lf.flush()
+        if response == 6:
+            if self.audio is not None:
+                self.audio._crash_simulation = True
+    def _simulate_tkinterlevel_crash(self):
+        response = ctypes.windll.user32.MessageBoxW(
+            0,
+            "This will initiate a Tkinter crash.\nIf you continue, the app will log an error. This will not cause a crash.",
+            "Continue",
+            0x04 | 0x30
+        )
+        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+            lf.write("NOT MY FAULT\n")
+            lf.flush()
+        if response == 6:
+            raise RuntimeError("User requested the crash.")
     def _change_skin_pointer(self):
         conf_dir = os.path.expandvars(r"%localappdata%\\betterwmpconf")
         pointer_path = os.path.join(conf_dir, "skinpointer.conf")
@@ -533,6 +601,10 @@ class BetterWMP(TkinterDnD.Tk):
                 f.write(os.path.basename(new_file))
             messagebox.showinfo("Skin Pointer", f"Skin pointer set to {os.path.basename(new_file)}\nYou can restart to see changes.")
         except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Update Skin Pointer failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             messagebox.showerror("Error", f"Could not update skinpointer.conf:\n{e}")
     def _on_single_click(self, event):
         lb = self.playlist_listbox
@@ -583,7 +655,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.playlist_listbox.selection_clear(0, tk.END)
         self.playlist_listbox.selection_set(new_idx)
         entry = self.playlist[new_idx]
-        self._open_file(entry['orig'])
+        self._open_file(entry['wav'])
         if self.audio and was_playing:
             self.audio.seek_seconds(0.0)
             self._set_play(True)
@@ -604,7 +676,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.playlist_listbox.selection_clear(0, tk.END)
         self.playlist_listbox.selection_set(new_idx)
         entry = self.playlist[new_idx]
-        self._open_file(entry['orig'])
+        self._open_file(entry['wav'])
         if self.audio and was_playing:
             self.audio.seek_seconds(0.0)
             self._set_play(True)
@@ -618,7 +690,7 @@ class BetterWMP(TkinterDnD.Tk):
         idx = idxs[0] if idxs else 0
         if 0 <= idx < len(self.playlist):
             entry = self.playlist[idx]
-            self._open_file(entry['orig'])
+            self._open_file(entry['wav'])
             if self.audio and was_playing:
                 self.audio.seek_seconds(0.0)
                 self._set_play(True)
@@ -654,10 +726,10 @@ class BetterWMP(TkinterDnD.Tk):
             self._update_nav_buttons()
         self._highlight_loaded()
     def _open_file(self, path):
-        already_in_playlist = any(entry['orig'] == path for entry in self.playlist)
+        already_in_playlist = any(entry['wav'] == path for entry in self.playlist)
         if not already_in_playlist:
             self.add_file_to_playlist(path)
-        entry = next((e for e in self.playlist if e['orig'] == path), None)
+        entry = next((e for e in self.playlist if e['wav'] == path), None)
         if entry is None:
             messagebox.showerror("Error", f"File not in playlist: {path}")
             return
@@ -671,6 +743,10 @@ class BetterWMP(TkinterDnD.Tk):
                 sr, data = wavfile.read(output_path)
         except Exception as e:
             traceback.print_exc()
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("File open failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             self.after(0, lambda: messagebox.showerror("Open failed", f"Could not read file:\n{e}"))
             return
         data = to_float32(np.asarray(data))
@@ -683,8 +759,8 @@ class BetterWMP(TkinterDnD.Tk):
             self.audio.on_track_end = self._handle_track_end
         self.audio.load_track(sr, left, right)
         self.vis = Visualizer(left, right, sr)
-        self.filename.set(os.path.basename(path))
-        self.title(f"BetterWMP: {self.filename.get()}")
+        self.displayname.set(os.path.basename(entry['orig']))
+        self.title(f"BetterWMP: {self.displayname.get()}")
         self.play_btn.configure(text="▶", state="normal")
         self.display_time = 0.0
         self.drag_target_time = 0.0
@@ -724,11 +800,19 @@ class BetterWMP(TkinterDnD.Tk):
             print(f"Converted and saved WAV to: {output_path}")
         except Exception as e:
             print(f"Error converting file: {e}")
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("File conversion failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             messagebox.showerror("File Conversion Error", f"Could not convert file to WAV format:\n{e}")
             return
         try:
             playsound(output_path)
         except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("File playback failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             print(f"Error playing WAV file: {e}")
             messagebox.showerror("Playback Error", f"Could not play the converted WAV file:\n{e}")
     def show_progress_window(self, total_files):
@@ -765,6 +849,10 @@ class BetterWMP(TkinterDnD.Tk):
         try:
             subprocess.run(cmd, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
         except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("File conversion failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             print(f"Conversion failed: {e}")
             return
         entry = {'orig': orig_path, 'wav': wav_path, 'name': name}
@@ -792,6 +880,10 @@ class BetterWMP(TkinterDnD.Tk):
         try:
             os.remove(entry['wav'])
         except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("File removal failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             print(f"Error removing file: {e}")
         if entry['wav'] == getattr(self, "current_wav", None):
             if self.audio is not None:
@@ -799,7 +891,7 @@ class BetterWMP(TkinterDnD.Tk):
                 self.audio = None
             if not self.playlist: 
                 self._set_play(False)
-                self.filename.set("<No file>")
+                self.displayname.set("<No file>")
                 self.viz.delete("all")
                 self.vis = None
                 self.play_btn.configure(text="▶", state="disabled")
@@ -807,7 +899,7 @@ class BetterWMP(TkinterDnD.Tk):
                 self._update_nav_buttons()
                 return
             self._set_play(False)
-            self.filename.set("<No file>")
+            self.displayname.set("<No file>")
             self.viz.delete("all")
             self.vis = None
             self.play_btn.configure(text="▶", state="disabled")
@@ -868,6 +960,10 @@ class BetterWMP(TkinterDnD.Tk):
                         subprocess.run(cmd, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
                     except Exception as e:
                         print(f"Conversion failed: {e}")
+                        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                            lf.write("Conversion failed:\n")
+                            traceback.print_exc(file=lf)
+                            lf.flush()
                         continue
                     entry = {'orig': f, 'wav': wav_path, 'name': name}
                     self.playlist.insert(insert_at, entry)
@@ -877,6 +973,10 @@ class BetterWMP(TkinterDnD.Tk):
                 self.playlist_listbox.selection_clear(0, tk.END)
                 self.playlist_listbox.selection_set(insert_at - 1)
         except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Insert failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             print(e)
         self._update_nav_buttons()
         self._highlight_loaded()
@@ -907,14 +1007,13 @@ class BetterWMP(TkinterDnD.Tk):
         idx = self.playlist_listbox.curselection()
         if idx:
             entry = self.playlist[idx[0]]
-            self._open_file(entry['orig'])
+            self._open_file(entry['wav'])
             self._set_play(False)
             self.play_btn.configure(state=tk.NORMAL)
         if was_playing:
             self._set_play(True)
         self._highlight_loaded()
     def _playlist_shuffle(self):
-        import random
         idxs = self.playlist_listbox.curselection()
         if idxs:
             idx = idxs[0]
@@ -947,11 +1046,15 @@ class BetterWMP(TkinterDnD.Tk):
             try:
                 os.remove(entry['wav'])
             except Exception:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Remove failed:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
                 pass
         self.playlist.clear()
         self.playlist_listbox.delete(0, tk.END)
         self._set_play(False)
-        self.filename.set("<No file>")
+        self.displayname.set("<No file>")
         self.vis = None
         self.viz.delete("all")
         self.play_btn.configure(state="disabled")
@@ -984,7 +1087,7 @@ class BetterWMP(TkinterDnD.Tk):
                 idx = idx + 1
                 self.playlist_listbox.selection_clear(0, tk.END)
                 self.playlist_listbox.selection_set(idx)
-                self._open_file(self.playlist[idx]['orig'])
+                self._open_file(self.playlist[idx]['wav'])
                 self.display_time = 0.0
                 if self.audio is not None:
                     self.audio.seek_seconds(0.0)
@@ -995,12 +1098,11 @@ class BetterWMP(TkinterDnD.Tk):
                 if self.audio is not None:
                     self.audio.seek_seconds(0.0)
         elif mode == "playlist repeat":
-            next_idx = (idx + 1) % playlist_len if playlist_len > 0 else 0
             if playlist_len > 0:
                 idx = (idx + 1) % playlist_len
                 self.playlist_listbox.selection_clear(0, tk.END)
                 self.playlist_listbox.selection_set(idx)
-                self._open_file(self.playlist[idx]['orig'])
+                self._open_file(self.playlist[idx]['wav'])
                 self.display_time = 0.0
                 if self.audio is not None:
                     self.audio.seek_seconds(0.0)
@@ -1009,7 +1111,7 @@ class BetterWMP(TkinterDnD.Tk):
                 idx = 0
                 self.playlist_listbox.selection_clear(0, tk.END)
                 self.playlist_listbox.selection_set(idx)
-                self._open_file(self.playlist[idx]['orig'])
+                self._open_file(self.playlist[idx]['wav'])
                 self.display_time = 0.0
                 if self.audio is not None:
                     self.audio.seek_seconds(0.0)
@@ -1113,52 +1215,61 @@ class BetterWMP(TkinterDnD.Tk):
         w = max(5, int(self.viz.winfo_width()))
         h = max(5, int(self.viz.winfo_height()))
         fmax = (self.vis.sr / 2.0) if self.vis else 22050.0
-        mid_pts = spectrum_to_polyline(freqs, mid_db, self.fmin, fmax, self.db_min, self.db_max, w, h)
-        side_pts = spectrum_to_polyline(freqs, side_db, self.fmin, fmax, self.db_min, self.db_max, w, h)
+        mid_pts = self.vis.spectrum_to_polyline(freqs, mid_db, self.fmin, fmax, self.db_min, self.db_max, w, h)
+        side_pts = self.vis.spectrum_to_polyline(freqs, side_db, self.fmin, fmax, self.db_min, self.db_max, w, h)
         if len(side_pts) > 1:
             self.viz.create_line(*sum(side_pts, ()), fill=self.side_color, width=1, tags="spec")
         if len(mid_pts) > 1:
             self.viz.create_line(*sum(mid_pts, ()), fill=self.mid_color, width=1, tags="spec")
     def _update_loop(self):
+        global frames, EmergencyStop
         t0 = time.perf_counter()
         try:
-            if self.audio is not None:
-                was_playing = self.audio.is_playing()
-                if self.is_dragging:
-                    self.display_time += (self.drag_target_time - self.display_time) / 3.0
-                    self.display_time = float(np.clip(self.display_time, 0.0, self.audio.duration_seconds()))
-                elif was_playing:
-                    self.display_time = self.audio.current_seconds()
-                if self.audio is not None and self.vis is not None:
-                    cur = self._format_time(self.display_time)
-                    total = self._format_time(self.audio.duration_seconds())
-                    self.timestamp_label.config(text=f"{cur} / {total}")
-                else:
-                    self.timestamp_label.config(text="")
-                if hasattr(self, '_pending_play') and self._pending_play:
-                    if not self.audio.is_playing():
-                        self._set_play(True)
-                        self.audio.play()
-            if self._pending_seek is not None:
-                self.audio.seek_seconds(self._pending_seek)
-                self._pending_seek = None
-            self._draw_progress()
-            if self.vis is not None and self.audio is not None and not self._is_minimized():
-                buffer_n = int(self.buffer_var.get())
-                zp = int(self.zp_var.get())
-                mids = self.vis.list_for_fft(self.display_time, 'm', buffer_n)
-                sides = self.vis.list_for_fft(self.display_time, 's', buffer_n)
-                freqs, mid_db = self.vis.fft_db(mids, zp)
-                _, side_db = self.vis.fft_db(sides, zp)
-                mask = (freqs >= self.fmin) & (freqs <= (self.vis.sr / 2.0))
-                freqs = freqs[mask]
-                mid_db = mid_db[mask]
-                side_db = side_db[mask]
-                self._draw_axes()
-                self._draw_spectrum(freqs, mid_db, side_db)
+            if not EmergencyStop:
+                if self.audio is not None:
+                    was_playing = self.audio.is_playing()
+                    if self.is_dragging:
+                        self.display_time += (self.drag_target_time - self.display_time) / 3.0
+                        self.display_time = float(np.clip(self.display_time, 0.0, self.audio.duration_seconds()))
+                    elif was_playing:
+                        self.display_time = self.audio.current_seconds()
+                    if self.audio is not None and self.vis is not None:
+                        cur = self._format_time(self.display_time)
+                        total = self._format_time(self.audio.duration_seconds())
+                        self.timestamp_label.config(text=f"{cur} / {total}")
+                    else:
+                        self.timestamp_label.config(text="")
+                    if hasattr(self, '_pending_play') and self._pending_play:
+                        if not self.audio.is_playing():
+                            self._set_play(True)
+                            self.audio.play()
+                if self._pending_seek is not None:
+                    self.audio.seek_seconds(self._pending_seek)
+                    self._pending_seek = None
+                self._draw_progress()
+                if self.vis is not None and self.audio is not None and not self._is_minimized():
+                    buffer_n = int(self.buffer_var.get())
+                    zp = int(self.zp_var.get())
+                    mids = self.vis.list_for_fft(self.display_time, 'm', buffer_n)
+                    sides = self.vis.list_for_fft(self.display_time, 's', buffer_n)
+                    freqs, mid_db = self.vis.fft_db(mids, zp)
+                    _, side_db = self.vis.fft_db(sides, zp)
+                    mask = (freqs >= self.fmin) & (freqs <= (self.vis.sr / 2.0))
+                    freqs = freqs[mask]
+                    mid_db = mid_db[mask]
+                    side_db = side_db[mask]
+                    self._draw_axes()
+                    self._draw_spectrum(freqs, mid_db, side_db)
+            else:
+                raise Exception("EMERGENCY STOP")
         except Exception as e:
+            if EmergencyStop:
+                raise e
             traceback.print_exc()
-            ctypes.windll.user32.MessageBoxW(0, f"An error occurred in the update loop:\n{e}", "Error from BetterWMP", 0x10)
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Exception in update loop:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             print(f"Error in update loop: {e}")
             pass
         t1 = time.perf_counter()
@@ -1168,11 +1279,17 @@ class BetterWMP(TkinterDnD.Tk):
         else:
             delay_minuend = 16
         delay = max(0, int(delay_minuend - elapsed_ms))
+        if frames % 3 == 0:
+            self._highlight_loaded()
+        frames += 1
         self.after(delay, self._update_loop)
     def _on_close(self):
         if self.audio is not None:
             self.audio.pause()
         shutil.rmtree(self.appdata_dir, ignore_errors=True)
+        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+            lf.write("The last instance of BetterWMP has been successful.\n")
+            lf.flush()
         self.destroy()
 
 def setup_skin_json():
@@ -1246,20 +1363,32 @@ def get_skin():
     
 SkinInfo = {}
 app = None
+frames = 0
+EmergencyStop = False
+DEBUG = False
 def main():
-    global SkinInfo, app
+    global SkinInfo, app, frames, EmergencyStop, DEBUG
     setup_skin_json()
     SkinInfo = get_skin()
     app = None
     try:
         app = BetterWMP()
+        app.report_callback_exception = tkinter_exception_handler.__get__(app, type(app))
     except Exception as e:
         if 'tkinter' in str(e).lower():
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Skin failed:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
             ctypes.windll.user32.MessageBoxW(0,"The skin configuration is probably corrupted.\nSkin pointer will reset upon next launch.", "Error from BetterWMP", 0x10)
             pointer = r"%localappdata%\betterwmpconf\skinpointer.conf"
             os.remove(os.path.expandvars(pointer))
             sys.exit(1)
         else:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Startup failed:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
             traceback.print_exc()
             show_native_messagebox("Error from BetterWMP", f"An error occurred:\n{e}")
             sys.exit(1)
