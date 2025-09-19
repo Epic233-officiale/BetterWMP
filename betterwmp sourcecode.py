@@ -1,16 +1,19 @@
 import os
-import time
+if os.name != "nt":
+   print("not a chance")
+   sys.exit(1)
 import sys
+import time
 import json
 import ctypes
-import traceback
 import shutil
 import random
+import base64
+import traceback
 import threading
 import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-import base64
 import numpy as np
 from scipy.io import wavfile
 from io import BytesIO
@@ -607,6 +610,7 @@ class BetterWMP(TkinterDnD.Tk):
                 lf.flush()
             messagebox.showerror("Error", f"Could not update skinpointer.conf:\n{e}")
     def _on_single_click(self, event):
+        self._highlight_loaded()
         lb = self.playlist_listbox
         size = lb.size()
         if size == 0:
@@ -616,7 +620,7 @@ class BetterWMP(TkinterDnD.Tk):
         if bbox is None or not (bbox[1] <= event.y < bbox[1] + bbox[3]):
             lb.selection_clear(0, tk.END)
             return "break"
-        self.after(1, self._highlight_loaded)
+        self._highlight_loaded()
     def _on_double_click(self, event):
         index = event.widget.nearest(event.y)
         bbox = event.widget.bbox(index)
@@ -1085,8 +1089,6 @@ class BetterWMP(TkinterDnD.Tk):
         elif mode == "playlist once":
             if idx + 1 < playlist_len:
                 idx = idx + 1
-                self.playlist_listbox.selection_clear(0, tk.END)
-                self.playlist_listbox.selection_set(idx)
                 self._open_file(self.playlist[idx]['wav'])
                 self.display_time = 0.0
                 if self.audio is not None:
@@ -1100,8 +1102,6 @@ class BetterWMP(TkinterDnD.Tk):
         elif mode == "playlist repeat":
             if playlist_len > 0:
                 idx = (idx + 1) % playlist_len
-                self.playlist_listbox.selection_clear(0, tk.END)
-                self.playlist_listbox.selection_set(idx)
                 self._open_file(self.playlist[idx]['wav'])
                 self.display_time = 0.0
                 if self.audio is not None:
@@ -1109,8 +1109,6 @@ class BetterWMP(TkinterDnD.Tk):
                 self._pending_play = True
             else:
                 idx = 0
-                self.playlist_listbox.selection_clear(0, tk.END)
-                self.playlist_listbox.selection_set(idx)
                 self._open_file(self.playlist[idx]['wav'])
                 self.display_time = 0.0
                 if self.audio is not None:
@@ -1272,6 +1270,20 @@ class BetterWMP(TkinterDnD.Tk):
                 lf.flush()
             print(f"Error in update loop: {e}")
             pass
+        try:
+            self._highlight_loaded()
+            if frames % 7 == 0:
+                self._update_nav_buttons()
+            if frames % 83 == 0:
+                self.bind("<Map>", lambda e: self.drop_target_register(DND_FILES))
+            if frames % 293 == 0:
+                self.drop_target_register(DND_FILES)
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Exception in periodic tasks:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            pass
         t1 = time.perf_counter()
         elapsed_ms = (t1 - t0) * 1000.0
         if self._is_minimized():
@@ -1279,8 +1291,6 @@ class BetterWMP(TkinterDnD.Tk):
         else:
             delay_minuend = 16
         delay = max(0, int(delay_minuend - elapsed_ms))
-        if frames % 3 == 0:
-            self._highlight_loaded()
         frames += 1
         self.after(delay, self._update_loop)
     def _on_close(self):
@@ -1303,6 +1313,9 @@ def setup_skin_json():
             pf.write("default.bwmpskin")
     if not os.path.isfile(skin_path):
         print("Reset")
+        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+            lf.write("Skin reset to default.\n")
+            lf.flush()
         skin_data = {
                     "fft":
                     {
@@ -1316,7 +1329,7 @@ def setup_skin_json():
                     "prog":
                     {
                         "bg": "#1a1a1a",
-                        "left": "#2a1240",
+                        "left": "#2d1d3d",
                         "thumb": "#d88aff"
                     },
                     "tkinter":
@@ -1332,7 +1345,7 @@ def setup_skin_json():
                         "buttondisabledfg": "#777777",
                         "listboxbg": "#111111",
                         "listboxfg": "#ffffff",
-                        "listboxselbg": "#582e70",
+                        "listboxselbg": "#342742",
                         "listboxselfg": "#ffffff",
                         "loadedfg": "#fca4ff",
                         "doublefg": "#ffc1f6",
@@ -1363,7 +1376,7 @@ def get_skin():
     
 SkinInfo = {}
 app = None
-frames = 0
+frames = 1
 EmergencyStop = False
 DEBUG = False
 def main():
@@ -1394,7 +1407,13 @@ def main():
             sys.exit(1)
     if len(sys.argv) > 1:
         files = sys.argv[1:]
-        app._playlist_append_sysargv(files)
+        try:
+            app._playlist_append_sysargv(files)
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Exception in command line argument processing:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
     try:
         app.mainloop()
     except Exception as e:
