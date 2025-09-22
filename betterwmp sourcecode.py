@@ -28,6 +28,8 @@ FAULT_LOG = os.path.expandvars(r"%localappdata%\betterwmpconf\fault.log")
 CONF_DIR = os.path.expandvars(r"%localappdata%\betterwmpconf")
 INSTALL_POINTER = os.path.join(CONF_DIR, "installpointer.conf")
 fault_file = open(FAULT_LOG, "w")
+runframes = 1
+unplug_flag = 0
 faulthandler.enable(file=fault_file)
 def excepthook(exc_type, exc_value, exc_traceback):
     traceback.print_exception(exc_type, exc_value, exc_traceback, file=fault_file)
@@ -65,7 +67,7 @@ from pydub import AudioSegment
 AudioSegment.converter = ffmpeg_exe or which("ffmpeg")
 if AudioSegment.converter is None:
     show_native_messagebox(
-        "FFmpeg Not Found",
+        "BetterWMP",
         "FFmpeg was not found. Non-WAV files will not open.\n"
         "Reinstall the newest version of BetterWMP to solve this issue."
     )
@@ -124,6 +126,16 @@ class AudioEngine:
     def is_playing(self):
         return self._playing.is_set()
     def _callback(self, outdata, frames, time_info, status):
+        global runframes, unplug_flag
+        if status:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write(f"Audio callback status: {status}\n")
+                lf.flush()
+            if "output underflow" in str(status):
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write(f"Output underflow. Offloading.\n")
+                    lf.flush()
+                unplug_flag = 1
         with self._lock:
             idx, n = self.idx, self.n
             left, right = self.left, self.right
@@ -272,6 +284,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.minsize(750, 500)
         self.playlist = []
         self.playlist_listbox = None
+        self.time_last_frame = None
         self.appdata_dir = os.path.expandvars(r"%localappdata%\betterwmpfiles")
         shutil.rmtree(self.appdata_dir, ignore_errors=True)
         os.makedirs(self.appdata_dir, exist_ok=True)
@@ -291,7 +304,9 @@ class BetterWMP(TkinterDnD.Tk):
         self.drag_target_time = 0.0
         self._pending_seek = None
         self._pending_play = False
+        self._stuckframe = 0
         self.current_wav = None
+        self.unplug_backup = None
         self.audio: AudioEngine | None = None
         self.drop_target_register(DND_FILES)
         self.dnd_bind('<<Drop>>', self._on_file_drop)
@@ -500,6 +515,19 @@ class BetterWMP(TkinterDnD.Tk):
         self.bind("<Delete>", lambda e: self._playlist_remove())
         self.bind("<Up>", lambda e: self._highlight_loaded())
         self.bind("<Down>", lambda e: self._highlight_loaded())
+        self.bind("<Control-Up>", lambda e: self._playlist_up())
+        self.bind("<Control-Down>", lambda e: self._playlist_down())
+        def set_unplug_flag(e):
+            global unplug_flag
+            if self.audio is not None:
+                response = messagebox.askyesno("BetterWMP", "Do you want to reload the audio engine?\nThis will pause playback.")
+                if response: 
+                    self.audio.pause()
+                    unplug_flag = 2
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("User requested audio engine reload.\n")
+                        lf.flush()
+        self.bind("<F5>", set_unplug_flag)
         if DEBUG:
             self.bind("<Control-Shift-Alt-c>", lambda e: self._simulate_crash())
             self.bind("<Control-Shift-Alt-C>", lambda e: self._simulate_crash())
@@ -525,7 +553,7 @@ class BetterWMP(TkinterDnD.Tk):
         response = ctypes.windll.user32.MessageBoxW(
             0,
             "This will initate an emergency stop.\nIf you continue, the app will crash.",
-            "Continue",
+            "BetterWMP DEBUG",
             0x04 | 0x30
         )
         with open(FAULT_LOG, "a", encoding="utf-8") as lf:
@@ -537,7 +565,7 @@ class BetterWMP(TkinterDnD.Tk):
         response = ctypes.windll.user32.MessageBoxW(
             0,
             "This will initiate a PortAudio crash.\nIf you continue, the app will crash upon track-end handling. You can undo by clearing the playlist.",
-            "Continue",
+            "BetterWMP DEBUG",
             0x04 | 0x30
         )
         with open(FAULT_LOG, "a", encoding="utf-8") as lf:
@@ -550,7 +578,7 @@ class BetterWMP(TkinterDnD.Tk):
         response = ctypes.windll.user32.MessageBoxW(
             0,
             "This will initiate a Tkinter crash.\nIf you continue, the app will log an error. This will not cause a crash.",
-            "Continue",
+            "BetterWMP DEBUG",
             0x04 | 0x30
         )
         with open(FAULT_LOG, "a", encoding="utf-8") as lf:
@@ -562,7 +590,7 @@ class BetterWMP(TkinterDnD.Tk):
         conf_dir = os.path.expandvars(r"%localappdata%\\betterwmpconf")
         pointer_path = os.path.join(conf_dir, "skinpointer.conf")
         if not os.path.isfile(pointer_path):
-            messagebox.showinfo("Skin Pointer", "skinpointer.conf not found.")
+            messagebox.showinfo("BetterWMP", "skinpointer.conf not found.")
             return
         new_file = filedialog.askopenfilename(
             title="Select Skin File",
@@ -597,18 +625,18 @@ class BetterWMP(TkinterDnD.Tk):
                     if key not in data[section]:
                         raise ValueError(f"Missing key: {section}.{key}")
         except Exception as e:
-            messagebox.showerror("Invalid Skin", f"Invalid skin file:\n{e}")
+            messagebox.showerror("BetterWMP", f"Invalid skin file:\n{e}")
             return
         try:
             with open(pointer_path, "w", encoding="utf-8") as f:
                 f.write(os.path.basename(new_file))
-            messagebox.showinfo("Skin Pointer", f"Skin pointer set to {os.path.basename(new_file)}\nYou can restart to see changes.")
+            messagebox.showinfo("BetterWMP", f"Skin pointer set to {os.path.basename(new_file)}\nYou can restart to see changes.")
         except Exception as e:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write("Update Skin Pointer failed:\n")
                 traceback.print_exc(file=lf)
                 lf.flush()
-            messagebox.showerror("Error", f"Could not update skinpointer.conf:\n{e}")
+            messagebox.showerror("BetterWMP", f"Could not update skinpointer.conf:\n{e}")
     def _on_single_click(self, event):
         self._highlight_loaded()
         lb = self.playlist_listbox
@@ -636,6 +664,11 @@ class BetterWMP(TkinterDnD.Tk):
         self.zp_var.set(val)
         self.zp_label.set(f"{val}  ▾")
     def _update_nav_buttons(self):
+        if self.audio is None:
+            self.prev_btn.configure(state=tk.DISABLED)
+            self.next_btn.configure(state=tk.DISABLED)
+            self.restart_btn.configure(state=tk.DISABLED)
+            return
         if len(self.playlist) > 1:
             self.prev_btn.configure(state=tk.NORMAL)
             self.next_btn.configure(state=tk.NORMAL)
@@ -735,7 +768,7 @@ class BetterWMP(TkinterDnD.Tk):
             self.add_file_to_playlist(path)
         entry = next((e for e in self.playlist if e['wav'] == path), None)
         if entry is None:
-            messagebox.showerror("Error", f"File not in playlist: {path}")
+            messagebox.showerror("BetterWMP", f"File not found in playlist: {path}")
             return
         output_path = entry['wav']
         try:
@@ -751,7 +784,7 @@ class BetterWMP(TkinterDnD.Tk):
                 lf.write("File open failed:\n")
                 traceback.print_exc(file=lf)
                 lf.flush()
-            self.after(0, lambda: messagebox.showerror("Open failed", f"Could not read file:\n{e}"))
+            self.after(0, lambda: messagebox.showerror("BetterWMP", f"Could not open file:\n{e}"))
             return
         data = to_float32(np.asarray(data))
         if data.ndim == 1:
@@ -808,7 +841,7 @@ class BetterWMP(TkinterDnD.Tk):
                 lf.write("File conversion failed:\n")
                 traceback.print_exc(file=lf)
                 lf.flush()
-            messagebox.showerror("File Conversion Error", f"Could not convert file to WAV format:\n{e}")
+            messagebox.showerror("BetterWMP", f"Could not convert file to WAV format:\n{e}")
             return
         try:
             playsound(output_path)
@@ -818,7 +851,7 @@ class BetterWMP(TkinterDnD.Tk):
                 traceback.print_exc(file=lf)
                 lf.flush()
             print(f"Error playing WAV file: {e}")
-            messagebox.showerror("Playback Error", f"Could not play the converted WAV file:\n{e}")
+            messagebox.showerror("BetterWMP", f"Could not playback the converted WAV file:\n{e}")
     def show_progress_window(self, total_files):
         self.progress_win = tk.Toplevel(self)
         self.progress_win.title("Processing Files")
@@ -921,10 +954,12 @@ class BetterWMP(TkinterDnD.Tk):
                     self.add_file_to_playlist(f)
                 self.after(0, lambda i=i, f=f: self.update_progress(i, len(files), os.path.basename(f)))
             self.after(0, self.close_progress_window)
+            self._update_nav_buttons()
+            self._highlight_loaded()
         threading.Thread(target=worker, daemon=True).start()
         self._update_nav_buttons()
         self._highlight_loaded()
-    def _playlist_append_sysargv(self, files):
+    def _playlist_append_sysargv(self, files, open = False):
         if not files:
             return
         def worker():
@@ -934,6 +969,10 @@ class BetterWMP(TkinterDnD.Tk):
                     self.add_file_to_playlist(f)
                 self.after(0, lambda i=i, f=f: self.update_progress(i, len(files), os.path.basename(f)))
             self.after(0, self.close_progress_window)
+            self._update_nav_buttons()
+            self._highlight_loaded()
+            if open:
+                self._open_file(self.playlist[0]['wav'])
         threading.Thread(target=worker, daemon=True).start()
         self._update_nav_buttons()
         self._highlight_loaded()
@@ -1041,6 +1080,39 @@ class BetterWMP(TkinterDnD.Tk):
             self.playlist_listbox.selection_clear(0, tk.END)
         self._update_nav_buttons()
         self._highlight_loaded()
+    def _offload_audioengine(self):
+        global unplug_flag
+        if self.audio is not None:
+            if unplug_flag:
+                self.unplug_backup = {}
+                idxs = [i for i, entry in enumerate(self.playlist)
+                        if entry['wav'] == self.current_wav
+                    ]
+                currentidx = idxs[0] if idxs else None
+                self.unplug_backup['loaded'] = currentidx
+                self.unplug_backup['timestamp'] = max(float(self.audio.current_seconds()) - 1.5, 0.0) if self.audio else 0.0
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write(f"Saved:\n{self.unplug_backup}\n")
+                    lf.flush()
+            if self.audio is not None:
+                self.audio.close()
+                self.audio = None
+                self._set_play(False)
+                self.play_btn.configure(text="▶", state="disabled")
+                self.displayname.set("<No file>")
+                self.title("BetterWMP: <No file>")
+                self.vis = None
+                self.viz.delete("all")
+                self.current_wav = None
+                self._highlight_loaded()
+            if self.unplug_backup:
+                time.sleep(0.016)
+                idx = self.unplug_backup.get('loaded', None)
+                if idx is not None and 0 <= idx < len(self.playlist):
+                    entry = self.playlist[idx]
+                    self._open_file(entry['wav'])
+                    if self.audio is not None:
+                        self._set_play(False)
     def _playlist_clear(self):
         if self.audio is not None:
             self.audio.close()
@@ -1220,10 +1292,20 @@ class BetterWMP(TkinterDnD.Tk):
         if len(mid_pts) > 1:
             self.viz.create_line(*sum(mid_pts, ()), fill=self.mid_color, width=1, tags="spec")
     def _update_loop(self):
-        global frames, EmergencyStop
+        global runframes, EmergencyStop, unplug_flag
         t0 = time.perf_counter()
         try:
             if not EmergencyStop:
+                if self.unplug_backup:
+                    self.audio.seek_seconds(self.unplug_backup.get('timestamp', 0.0))
+                    self._draw_progress()
+                    self.display_time = self.audio.current_seconds()
+                    self.unplug_backup = None
+                if unplug_flag:
+                    if unplug_flag <= 1:
+                        show_native_messagebox("BetterWMP","Need to reconnect audio device. \nPlayback will stop. You can now reconnect your audio device before pressing OK.")
+                    self._offload_audioengine()
+                    unplug_flag = 0
                 if self.audio is not None:
                     was_playing = self.audio.is_playing()
                     if self.is_dragging:
@@ -1271,13 +1353,24 @@ class BetterWMP(TkinterDnD.Tk):
             print(f"Error in update loop: {e}")
             pass
         try:
+            if runframes % 3 == 0 and not (self.audio is not None and self.audio.is_playing() and self.audio.current_seconds() == self.time_last_frame):
+                self._stuckframe = runframes
+            t = 45 if not self._is_minimized() else 12
+            if runframes % 3 == 0 and runframes - self._stuckframe > t and not unplug_flag:
+                unplug_flag = 1
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Audio engine stuck. Offloading.\n")
             self._highlight_loaded()
-            if frames % 7 == 0:
+            if runframes % 7 == 0:
                 self._update_nav_buttons()
-            if frames % 83 == 0:
+            if runframes % 83 == 0:
                 self.bind("<Map>", lambda e: self.drop_target_register(DND_FILES))
-            if frames % 293 == 0:
+            if runframes % 293 == 0:
                 self.drop_target_register(DND_FILES)
+            if self.audio is not None:
+                self.time_last_frame = self.audio.current_seconds()
+            else:
+                self.time_last_frame = None
         except Exception:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write("Exception in periodic tasks:\n")
@@ -1291,7 +1384,7 @@ class BetterWMP(TkinterDnD.Tk):
         else:
             delay_minuend = 16
         delay = max(0, int(delay_minuend - elapsed_ms))
-        frames += 1
+        runframes += 1
         self.after(delay, self._update_loop)
     def _on_close(self):
         if self.audio is not None:
@@ -1302,127 +1395,3 @@ class BetterWMP(TkinterDnD.Tk):
             lf.flush()
         self.destroy()
 
-def setup_skin_json():
-    conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
-    os.makedirs(conf_dir, exist_ok=True)
-    skin_path = os.path.join(conf_dir, "default.bwmpskin")
-    pointer_path = os.path.join(conf_dir, "skinpointer.conf")
-    if not os.path.isfile(pointer_path):
-        with open(pointer_path, "w", encoding="utf-8") as pf:
-            os.remove(skin_path)
-            pf.write("default.bwmpskin")
-    if not os.path.isfile(skin_path):
-        print("Reset")
-        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-            lf.write("Skin reset to default.\n")
-            lf.flush()
-        skin_data = {
-                    "fft":
-                    {
-                        "bg": "#0f0f0f",
-                        "fg": "#aaaaaa",
-                        "mid": "#b25aff",
-                        "side": "#5f405d",
-                        "line": "#232333",
-                        "text": "#777777"
-                    },
-                    "prog":
-                    {
-                        "bg": "#1a1a1a",
-                        "left": "#2d1d3d",
-                        "thumb": "#d88aff"
-                    },
-                    "tkinter":
-                    {
-                        "bg": "#333333",
-                        "label": "#ffffff",
-                        "buttonbg": "#555555",
-                        "buttonfg": "#ffffff",
-                        "buttonactivebg": "#685868",
-                        "buttonactivefg": "#ffffff",
-                        "buttonpressbg": "#222222",
-                        "buttonpressfg": "#ffffff",
-                        "buttondisabledfg": "#777777",
-                        "listboxbg": "#111111",
-                        "listboxfg": "#ffffff",
-                        "listboxselbg": "#342742",
-                        "listboxselfg": "#ffffff",
-                        "loadedfg": "#fca4ff",
-                        "doublefg": "#ffc1f6",
-                        "dropdownbg": "#555555",
-                        "dropdownfg": "#ffffff",
-                        "dropdownactivebg": "#685868",
-                        "dropdownactivefg": "#ffffff"
-                    }
-                }
-        with open(skin_path, "w", encoding="utf-8") as f:
-            json.dump(skin_data, f, indent=4)
-    if not os.path.isfile(pointer_path):
-        with open(pointer_path, "w", encoding="utf-8") as pf:
-            pf.write("default.bwmpskin")
-
-def get_skin():
-    conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
-    pointer_path = os.path.join(conf_dir, "skinpointer.conf")
-    if not os.path.isfile(pointer_path):
-        return {}
-    with open(pointer_path, "r", encoding="utf-8") as pf:
-        skin_file = pf.read().strip()
-    skin_path = os.path.join(conf_dir, skin_file)
-    if not os.path.isfile(skin_path):
-        return {}
-    with open(skin_path, "r", encoding="utf-8") as sf:
-        return json.load(sf)
-    
-SkinInfo = {}
-app = None
-frames = 1
-EmergencyStop = False
-DEBUG = False
-def main():
-    global SkinInfo, app, frames, EmergencyStop, DEBUG
-    setup_skin_json()
-    SkinInfo = get_skin()
-    app = None
-    try:
-        app = BetterWMP()
-        app.report_callback_exception = tkinter_exception_handler.__get__(app, type(app))
-    except Exception as e:
-        if 'tkinter' in str(e).lower():
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                    lf.write("Skin failed:\n")
-                    traceback.print_exc(file=lf)
-                    lf.flush()
-            ctypes.windll.user32.MessageBoxW(0,"The skin configuration is probably corrupted.\nSkin pointer will reset upon next launch.", "Error from BetterWMP", 0x10)
-            pointer = r"%localappdata%\betterwmpconf\skinpointer.conf"
-            os.remove(os.path.expandvars(pointer))
-            sys.exit(1)
-        else:
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                    lf.write("Startup failed:\n")
-                    traceback.print_exc(file=lf)
-                    lf.flush()
-            traceback.print_exc()
-            show_native_messagebox("Error from BetterWMP", f"An error occurred:\n{e}")
-            sys.exit(1)
-    if len(sys.argv) > 1:
-        files = sys.argv[1:]
-        try:
-            app._playlist_append_sysargv(files)
-        except Exception:
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("Exception in command line argument processing:\n")
-                traceback.print_exc(file=lf)
-                lf.flush()
-    try:
-        app.mainloop()
-    except Exception as e:
-        with open(FAULT_LOG, "a") as lf:
-            traceback.print_exc(file=lf)
-        with open(FAULT_LOG, "r") as lf:
-            fault_text = lf.read()
-        show_native_messagebox("BetterWMP has crashed", fault_text)
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
