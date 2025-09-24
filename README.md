@@ -1,4 +1,4 @@
-## BetterWMP v1.3.5
+## BetterWMP
 
 Features:
 - Supports most audio filetypes and codecs and opens them with low latency
