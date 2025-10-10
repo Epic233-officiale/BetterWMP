@@ -1,7 +1,4 @@
 import os
-if os.name != "nt":
-   print("not a chance")
-   sys.exit(1)
 import sys
 import time
 import json
@@ -752,6 +749,9 @@ class BetterWMP(TkinterDnD.Tk):
         if valid_files:
             self._playlist_append_sysargv(valid_files)
             self._update_nav_buttons()
+        else:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Rejected files on drop.\n")
         self._highlight_loaded()
     def _open_file(self, path):
         already_in_playlist = any(entry['wav'] == path for entry in self.playlist)
@@ -945,10 +945,12 @@ class BetterWMP(TkinterDnD.Tk):
                     self.add_file_to_playlist(f)
                 self.after(0, lambda i=i, f=f: self.update_progress(i, len(files), os.path.basename(f)))
             self.after(0, self.close_progress_window)
+            self._update_nav_buttons()
+            self._highlight_loaded()
         threading.Thread(target=worker, daemon=True).start()
         self._update_nav_buttons()
         self._highlight_loaded()
-    def _playlist_append_sysargv(self, files):
+    def _playlist_append_sysargv(self, files, startup = False):
         if not files:
             return
         def worker():
@@ -958,6 +960,10 @@ class BetterWMP(TkinterDnD.Tk):
                     self.add_file_to_playlist(f)
                 self.after(0, lambda i=i, f=f: self.update_progress(i, len(files), os.path.basename(f)))
             self.after(0, self.close_progress_window)
+            if startup:
+                self._open_file(self.playlist[0]['wav'])
+            self._update_nav_buttons()
+            self._highlight_loaded()
         threading.Thread(target=worker, daemon=True).start()
         self._update_nav_buttons()
         self._highlight_loaded()
@@ -1493,7 +1499,7 @@ def main():
     if len(sys.argv) > 1:
         files = sys.argv[1:]
         try:
-            app._playlist_append_sysargv(files)
+            app._playlist_append_sysargv(files, True)
         except Exception:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write("Exception in command line argument processing:\n")
