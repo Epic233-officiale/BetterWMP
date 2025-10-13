@@ -21,13 +21,20 @@ import sounddevice as sd
 from tkinterdnd2 import TkinterDnD, DND_FILES
 import faulthandler
 
+
 FAULT_LOG = os.path.expandvars(r"%localappdata%\betterwmpconf\fault.log")
 CONF_DIR = os.path.expandvars(r"%localappdata%\betterwmpconf")
 INSTALL_POINTER = os.path.join(CONF_DIR, "installpointer.conf")
+conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
+DEBUG = os.path.isfile(os.path.join(conf_dir, "debug"))
 fault_file = open(FAULT_LOG, "w")
 runframes = 1
 unplug_flag = 0
 faulthandler.enable(file=fault_file)
+if DEBUG:
+    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+        lf.write("DEBUG\n")
+        lf.flush()
 def excepthook(exc_type, exc_value, exc_traceback):
     traceback.print_exception(exc_type, exc_value, exc_traceback, file=fault_file)
     fault_file.flush()
@@ -297,6 +304,8 @@ class BetterWMP(TkinterDnD.Tk):
         self.drag_target_time = 0.0
         self._pending_seek = None
         self._pending_play = False
+        self._frame_times = []
+        self._fps = 0.0
         self._stuckframe = 0
         self.current_wav = None
         self.unplug_backup = None
@@ -459,6 +468,9 @@ class BetterWMP(TkinterDnD.Tk):
         self.skin_btn.pack(side=tk.LEFT, padx=(2, 0))
         self.timestamp_label = tk.Label(top, text="", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a"))
         self.timestamp_label.pack(side=tk.LEFT, padx=(10, 0))
+        if DEBUG:
+            self.fps_label = tk.Label(top, text="", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a"))
+            self.fps_label.pack(side=tk.LEFT, padx=(5, 0))
         self._update_nav_buttons()
         self.prog = tk.Canvas(self, height=24, background=SkinInfo["prog"]["bg"], highlightthickness=0)
         self.prog.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(4, 8))
@@ -917,15 +929,7 @@ class BetterWMP(TkinterDnD.Tk):
             if self.audio is not None:
                 self.audio.close()
                 self.audio = None
-            if not self.playlist: 
-                self._set_play(False)
-                self.displayname.set("<No file>")
-                self.viz.delete("all")
-                self.vis = None
-                self.play_btn.configure(text="▶", state="disabled")
-                self.title("BetterWMP: <No file>")
-                self._update_nav_buttons()
-                return
+            self.timestamp_label.config(text="")
             self._set_play(False)
             self.displayname.set("<No file>")
             self.viz.delete("all")
@@ -1121,6 +1125,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.playlist.clear()
         self.playlist_listbox.delete(0, tk.END)
         self._set_play(False)
+        self.timestamp_label.config(text="")
         self.displayname.set("<No file>")
         self.vis = None
         self.viz.delete("all")
@@ -1289,9 +1294,19 @@ class BetterWMP(TkinterDnD.Tk):
         if len(mid_pts) > 1:
             self.viz.create_line(*sum(mid_pts, ()), fill=self.mid_color, width=1, tags="spec")
     def _update_loop(self):
-        global runframes, EmergencyStop, unplug_flag
+        global runframes, EmergencyStop, unplug_flag, DEBUG
         t0 = time.perf_counter()
         try:
+            current_time = t0
+            if DEBUG:
+                self._frame_times.append(current_time)
+                if len(self._frame_times) > 30:
+                    self._frame_times.pop(0)
+                if len(self._frame_times) >= 2:
+                    time_span = self._frame_times[-1] - self._frame_times[0]
+                    if time_span > 0:
+                        self._fps = (len(self._frame_times) - 1) / time_span
+                        self.fps_label.config(text=f"FPS: {self._fps:.1f}")
             if not EmergencyStop:
                 if self.unplug_backup:
                     self.audio.seek_seconds(self.unplug_backup.get('timestamp', 0.0))
@@ -1320,6 +1335,9 @@ class BetterWMP(TkinterDnD.Tk):
                         if not self.audio.is_playing():
                             self._set_play(True)
                             self.audio.play()
+                else:
+                    if DEBUG:
+                        self.fps_label.config(text=f"FPS: {self._fps:.1f}")
                 if self._pending_seek is not None:
                     self.audio.seek_seconds(self._pending_seek)
                     self._pending_seek = None
@@ -1469,7 +1487,6 @@ SkinInfo = {}
 app = None
 runframes = 1
 EmergencyStop = False
-DEBUG = False
 def main():
     global SkinInfo, app, runframes, EmergencyStop, DEBUG
     setup_skin_json()
