@@ -21,7 +21,6 @@ import sounddevice as sd
 from tkinterdnd2 import TkinterDnD, DND_FILES
 import faulthandler
 
-
 FAULT_LOG = os.path.expandvars(r"%localappdata%\betterwmpconf\fault.log")
 CONF_DIR = os.path.expandvars(r"%localappdata%\betterwmpconf")
 INSTALL_POINTER = os.path.join(CONF_DIR, "installpointer.conf")
@@ -41,7 +40,7 @@ def excepthook(exc_type, exc_value, exc_traceback):
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
 sys.excepthook = excepthook
 def show_native_messagebox(title, message):
-    ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)
+    threading.Thread(target=lambda: ctypes.windll.user32.MessageBoxW(0, message, title, 0x10), daemon=True).start()
 def _read_install_dir():
     try:
         with open(INSTALL_POINTER, "r", encoding="utf-8") as f:
@@ -105,9 +104,76 @@ def to_float32(audio):
 
 ICON = r"data:image/x-icon;base64,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/f/w9/3/8Pf9//D3/f/w9/3/IyQl/+Lk4f/9//n/+fHn/97Vxv/8//v//f//////////////UjFE/1IxRP8eEhn/UjFE/1IxRP9SMUT/UjFE/wAAAP/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/z9Xa//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3///////7+/v/+/v7//f39////////////AAAA/wAAAP9SMUT/UjFE/y4cJv9SMUT/UjFE/1IxRP9SMUT/AAAA//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9/8nP1P///////////////////////////wAAAP8AAAD//////1IxRP9SMUT/Sy0+/1IxRP9SMUT/UjFE/1IxRP8EAwT/8Pf9/+/2/P8BAQH/tbq+//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9/3yAg/8AAAD/8Pf9//D3/f9SVVj/OyQx////////////////////////////AAAA////////////UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/yEUG//w9/3/8Pf9/wAAAP8jJCX/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/2N7j/woLC//w9/3/AAAA/1IxRP9SMUT///////////////////////////8AAAD///////////9SMUT/UjFE/1IxRP88JDL/UjFE/1IxRP9SMUT/Ty9C/0tNT//w9/3/8Pf9//D3/f/w9/3/6O/1//D3/f/w9/3/8Pf9//D3/f/w9/3/ERES/wcHB/8FBQX/UjFE/08vQf///////////wAAAP///////////wAAAP///////////xgUFv9SMUT/UjFE/wAAAP9SMUT/UjFE/1IxRP9SMUT/Ty9C/wcEBv/w9/3/8Pf9/wAAAP9SMUT/UjFE/1EwQ/9QMEL/vcPH//D3/f/w9/3/8Pf9/w0ODv9SMUT/Mh4q////////////AAAA/wAAAP//////AAAA////////////EhIS/1IxRP9SMUT/JRYf/1IxRP9SMUT/UjFE/1IxRP8MBwr/UjFE/+Xr8f9jZmj/UjFE/1IxRP9SMUT/UjFE/1IxRP8BAQH/8Pf9/2NmaP/w9/3/AAAA/1IxRP8AAAD//////wAAAP//////AAAA//////8AAAD////////////9/f3/UjFE/1IxRP9SMUT/Sy0+/1IxRP9SMUT/UjFE/wAAAP9SMUT/AAAA//D3/f9RMUP/UjFE/1IxRP9SMUT/UjFE/1ExQ//w9/3/8Pf9/7vBxf8AAAD/UjFE/wEBAf8AAAD/AAAA//////8AAAD//f39/wAAAP////////////////8KCQn/UjFE/1IxRP8FBAT/UjFE/1IxRP9SMUT/NB8r/1IxRP9SMUT/7vX7/zwkMv9SMUT/UjFE/1IxRP9SMUT/UjFE/ykqK//w9/3/CwoL/1IxRP9SMUT/v7+//wAAAP8AAAD//////wQEBP8AAAD/AAAA/////////////////1NTU/9SMUT/UjFE/1IxRP9NLj//UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD/FBIX/1IxRP9SMUT/UjFE/1IxRP9SMUT/AgIC//D3/f9QMEP/UjFE/1IxRP///////////////////////////wAAAP8AAAD//////////////////////x8XG/9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD/UjFE/1IxRP9SMUT/UjFE/1IxRP8pGCL/AAAA/1IxRP9SMUT/EQwP////////////////////////////AAAA/wAAAP//////////////////////MDAw/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/0wtP/9QMEL/UjFE/1IxRP8DAwP///////////////////////////8AAAD/AAAA////////////////////////////Ihkf/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE///////////////////////////////////////19fX////////////////////////////c3Nz/UTFD/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD///////////////////////////////////////////////////////////////////////////9HR0f/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/SCs8//////////////////////////////////////////////////////////////////////////////////////8FBQX/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/z8mNP9cXFz///////////////////////////////////////////////////////////////////////////////////////////9vb2//NSUt/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/zgiL/8GBgb////////////////////////////////////////////////////////////////////////////////////////////////////////////9////AAAA/ykZIv9SMUT/UjFE/1IxRP9SMUT/Sy0+/w0LDP8kJCT//f/9//////////////////////////////7///3//f/////////////////////////////+////////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
+class AudioDeviceManager:
+    @staticmethod
+    def list_output_devices():
+        output_devices = []
+        try:
+            devices = sd.query_devices()
+            for i, d in enumerate(devices):
+                if d.get("max_output_channels", 0) > 0:
+                    try:
+                        hostapi_name = sd.query_hostapis(d["hostapi"])["name"]
+                    except Exception:
+                        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                            lf.write("Failed to get host API for device:\n")
+                            traceback.print_exc(file=lf)
+                            lf.flush()
+                        hostapi_name = "Unknown"
+                    output_devices.append({
+                        "id": i,
+                        "name": d["name"].strip(),
+                        "driver": hostapi_name.strip()
+                    })
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Failed to query output devices:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+        return output_devices
+    @staticmethod
+    def get_default_output_device():
+        try:
+            default_out_idx = sd.default.device[1]
+            device_info = sd.query_devices(default_out_idx)
+            hostapi = sd.query_hostapis(device_info["hostapi"])["name"]
+            return device_info["name"], hostapi
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Failed to get default output device:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            return None, None
+    @staticmethod
+    def enumerate_all_output_devices():
+        device_map = {}
+        try:
+            devices = sd.query_devices()
+            hostapis = [sd.query_hostapis(i)["name"] for i in range(sd.query_hostapis())]
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Failed to enumerate output devices:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            hostapis = []
+            devices = []
+        for i, d in enumerate(devices):
+            if d.get("max_output_channels", 0) > 0:
+                try:
+                    hostapi = sd.query_hostapis(d["hostapi"])["name"]
+                except Exception:
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("Failed to get host API for device:\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
+                    hostapi = "Unknown"
+                device_map.setdefault(hostapi, []).append((d["name"], i))
+        return device_map
+
 class AudioEngine:
-    def __init__(self, sr=44100):
+    def __init__(self, sr=44100, device=None):
         self.sr = sr
+        self.device = None
         self.left = np.zeros(1, dtype=np.float32)
         self.right = np.zeros(1, dtype=np.float32)
         self.n = 1
@@ -116,17 +182,80 @@ class AudioEngine:
         self._playing = threading.Event()
         self._crash_simulation = False
         self._lock = threading.Lock()
-        self._stream = sd.OutputStream(
-            samplerate=self.sr,
-            channels=2,
-            dtype="float32",
-            callback=self._callback,
-            blocksize=0
-        )
+        self.volume = 1.0
+        print(device)
+        try:
+            if device is not None:
+                if isinstance(device, str):
+                    name_part, driver_part = None, None
+                    if "—" in device:
+                        name_part, driver_part = [s.strip() for s in device.split("—", 1)]
+                    else:
+                        name_part = device.strip()
+                    match = None
+                    devices = sd.query_devices()
+                    for i, d in enumerate(devices):
+                        dev_name = d["name"].strip()
+                        dev_driver = sd.query_hostapis(d["hostapi"])["name"].strip()
+                        if (
+                            name_part.lower() == dev_name.lower()
+                            and (driver_part is None or driver_part.lower() == dev_driver.lower())
+                        ):
+                            match = i
+                            break
+                    if match is not None:
+                        self.device = match
+                        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                            lf.write(f"Matched audio device: '{dev_name}' — {dev_driver} (id={match})\n")
+                            lf.flush()
+                    else:
+                        self.device = None
+                        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                            lf.write(f"No matching audio device for '{device}', using default.\n")
+                            lf.flush()
+                else:
+                    self.device = None
+                self._stream = sd.OutputStream(
+                    samplerate=self.sr,
+                    channels=2,
+                    dtype='float32',
+                    callback=self._callback,
+                    device=self.device,
+                    blocksize=0,
+                    latency='low'
+                )
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write(f"Using audio device: {self.device}\n")
+                    lf.flush()
+            else:
+                self._stream = sd.OutputStream(
+                    samplerate=self.sr,
+                    channels=2,
+                    dtype="float32",
+                    callback=self._callback,
+                    blocksize=0
+                )
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Using default audio device.\n")
+                    lf.flush()
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("AudioEngine initialization failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            raise
         self._stream.start()
+        info = sd.query_devices(self.device or sd.default.device[1])
+        api = sd.query_hostapis(info["hostapi"])["name"]
+        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+            lf.write(f"AudioEngine started with device '{info['name']}' (API: {api})\n")
+            lf.flush()
         self.on_track_end = None
     def is_playing(self):
         return self._playing.is_set()
+    def set_volume(self, vol_percent: float):
+        with self._lock:
+            self.volume = np.clip(vol_percent / 100.0, 0.0, 1.0)
     def _callback(self, outdata, frames, time_info, status):
         global runframes, unplug_flag
         if status:
@@ -137,19 +266,20 @@ class AudioEngine:
         with self._lock:
             idx, n = self.idx, self.n
             left, right = self.left, self.right
+            volume = self.volume
         if not self._playing.is_set():
             outdata.fill(0)
             return
         end = idx + frames
         if end <= n:
-            outdata[:, 0] = left[idx:end]
-            outdata[:, 1] = right[idx:end]
+            outdata[:, 0] = left[idx:end] * volume
+            outdata[:, 1] = right[idx:end] * volume
             self.idx = end
         else:
             remain = n - idx
             if remain > 0:
-                outdata[:remain, 0] = left[idx:]
-                outdata[:remain, 1] = right[idx:]
+                outdata[:remain, 0] = left[idx:] * volume
+                outdata[:remain, 1] = right[idx:] * volume
             outdata[remain:, :].fill(0)
             self._playing.clear()
             self.idx = 0
@@ -208,6 +338,242 @@ class AudioEngine:
         finally:
             self._playing.clear()
             self.idx = 0
+
+class SettingsMenu(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("BetterWMP Settings")
+        self.geometry("350x420")
+        self.resizable(False, False)
+        self.configure(bg=SkinInfo["tkinter"].get("bg", "#333333"))
+        self.transient(parent)
+        self.grab_set()
+        self.parent = parent
+        tk.Label(
+            self, text="BetterWMP Settings",
+            fg=SkinInfo["tkinter"].get("label", "#ffffff"),
+            bg=SkinInfo["tkinter"].get("bg", "#333333"),
+            font=("Segoe UI", 12, "bold")
+        ).pack(fill="x", padx=(10, 5), pady=(20, 20))
+        conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
+        os.makedirs(conf_dir, exist_ok=True)
+        prefs_path = os.path.join(conf_dir, "userprefs.conf")
+        prev_device = None
+        prev_device_id = None
+        prev_volume = 100
+        if os.path.isfile(prefs_path):
+            try:
+                with open(prefs_path, "r", encoding="utf-8") as f:
+                    prefs = json.load(f)
+                    prev_device = prefs.get("audio_device")
+                    prev_device_id = prefs.get("audio_device_id")
+                    prev_volume = prefs.get("volume", 100)
+            except Exception:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to read user preferences:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+        def get_hostapi_list():
+            apis = []
+            try:
+                apis = [sd.query_hostapis(i)["name"] for i in range(len(sd.query_hostapis()))]
+            except Exception:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to get host API list:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+                apis = ["MME", "Windows DirectSound", "Windows WASAPI"]
+            return apis
+        hostapis = get_hostapi_list()
+        self.driver_var = tk.StringVar(value=hostapis[0])
+        self.driver_menu = tk.OptionMenu(self, self.driver_var, *hostapis)
+        self.driver_menu.config(
+            bg=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+            fg=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
+            activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#505050"),
+            activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
+            relief="flat", highlightthickness=0, indicatoron=0, 
+            borderwidth=0, bd=0
+        )
+        self.driver_menu["menu"].config(
+            bg=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+            fg=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
+            activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#505050"),
+            activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
+            relief="flat",
+            borderwidth=0
+        )
+        self.driver_menu.pack(fill="x", padx=(10, 10), pady=(0, 8))
+        def get_device_list_for_driver(driver_name):
+            device_map = []
+            try:
+                devices = sd.query_devices()
+                for i, d in enumerate(devices):
+                    hostapi = sd.query_hostapis(d["hostapi"])["name"]
+                    if hostapi.lower() == driver_name.lower() and d.get("max_output_channels", 0) > 0:
+                        device_map.append((f"{d['name']} — {hostapi}", i))
+            except Exception:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to get device list for driver:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+                pass
+            if not device_map:
+                device_map = [("Default Output", None)]
+            return device_map
+        def refresh_device_list(*_):
+            selected_driver = self.driver_var.get()
+            device_items = get_device_list_for_driver(selected_driver)
+            display_names = [name for name, _ in device_items]
+            self.device_map = {name: dev_id for name, dev_id in device_items}
+            
+            current_device = self.device_var.get()
+            menu = self.device_menu["menu"]
+            menu.delete(0, "end")
+            for name in display_names:
+                menu.add_radiobutton(label=name, variable=self.device_var, value=name)
+            if current_device not in display_names:
+                self.device_var.set(display_names[0])
+        self.device_map = {}
+        initial_device_items = get_device_list_for_driver(hostapis[0])
+        display_names = [name for name, _ in initial_device_items]
+        self.device_map = {name: dev_id for name, dev_id in initial_device_items}
+        self.device_var = tk.StringVar(value=display_names[0])
+        self.device_menu = tk.OptionMenu(self, self.device_var, *display_names)
+        self.device_menu.config(
+            bg=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+            fg=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
+            activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#505050"),
+            activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
+            relief="flat", highlightthickness=0, indicatoron=0, 
+            borderwidth=0, bd=0
+        )
+        self.device_menu["menu"].config(
+            bg=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+            fg=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
+            activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#505050"),
+            activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
+            relief="flat",
+            borderwidth=0
+        )
+        self.device_menu.pack(fill="x", padx=(10, 10), pady=(0, 8))
+        self.driver_var.trace_add("write", refresh_device_list)
+        button_row1 = tk.Frame(self, bg=SkinInfo["tkinter"].get("bg", "#333333"))
+        button_row1.pack(fill="x", padx=(10, 10), pady=(0, 10))
+        ttk.Button(
+            button_row1, text="Refresh Devices", command=refresh_device_list, style="Flat.TButton", takefocus=False
+        ).pack(side="left", padx=(0, 5), pady=(0, 10))
+        def test_output():
+            def test_worker():
+                try:
+                    for widget in button_row1.winfo_children():
+                        if isinstance(widget, ttk.Button) and widget.cget("text") == "Test Output":
+                            widget.configure(state="disabled")
+                            break
+                    selected = self.device_var.get()
+                    device_id = self.device_map.get(selected)
+                    sr = 44100
+                    t = np.linspace(0, 0.5, int(sr * 0.5), endpoint=False)
+                    tone = 0.25 * np.sin(2 * np.pi * 440 * t)
+                    sd.play(np.column_stack([tone, tone]), samplerate=sr, device=device_id)
+                    sd.wait()
+                except Exception as e:
+                    self.after(0, lambda: messagebox.showerror("BetterWMP", f"Test playback failed:\n{e}"))
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("Test output playback failed:\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
+                finally:
+                    for widget in button_row1.winfo_children():
+                        if isinstance(widget, ttk.Button) and widget.cget("text") == "Test Output":
+                            widget.configure(state="normal")
+                            break
+            threading.Thread(target=test_worker, daemon=True).start()
+        ttk.Button(
+            button_row1, text="Test Output", command=test_output, style="Flat.TButton", takefocus=False
+        ).pack(side="left", padx=(5, 5), pady=(0, 10))
+        def apply_output_device():
+            selected_name = self.device_var.get()
+            device_id = self.device_map.get(selected_name)
+            try:
+                with open(prefs_path, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "audio_device": selected_name,
+                        "audio_device_id": device_id,
+                        "volume": self.volume_var.get()
+                    }, f, indent=2)
+            except Exception:
+                messagebox.showerror("BetterWMP", "Could not save preferences.")
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to save user preferences:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+                return
+            global unplug_flag
+            unplug_flag = 2
+            if self.parent.audio:
+                self.parent.audio.pause()
+                messagebox.showinfo(
+                    "BetterWMP",
+                    f"Output device set to:\n{selected_name}\nAudio engine will reload."
+                )
+            else:
+                messagebox.showinfo(
+                    "BetterWMP",
+                    f"Output device set to:\n{selected_name}"
+                )
+            # self.destroy()
+        ttk.Button(
+            button_row1, text="Apply and Reload",
+            command=apply_output_device, style="Flat.TButton", takefocus=False
+        ).pack(side="left", padx=(5, 0), pady=(0, 10))
+        tk.Label(
+            self, text="Playback Volume:",
+            fg=SkinInfo["tkinter"].get("label", "#ffffff"),
+            bg=SkinInfo["tkinter"].get("bg", "#333333")
+        ).pack(fill="x", padx=(10, 10), pady=(10, 10))
+        self.volume_var = tk.IntVar(value=prev_volume)
+        self.volume_slider = tk.Scale(
+            self, from_=0, to=100, orient="horizontal",
+            variable=self.volume_var, length=200,
+            fg=SkinInfo["tkinter"].get("label", "#ffffff"),
+            highlightthickness=0,
+            troughcolor=SkinInfo["prog"].get("bg", "#1a1a1a"),
+            activebackground=SkinInfo["prog"].get("thumb", "#d88aff"),
+            sliderrelief="flat",
+            borderwidth=0, showvalue=0,
+            sliderlength=20, resolution=0,
+        )
+        self.volume_slider.pack(fill="x", padx=(10, 10), pady=(0, 5))
+        volume_percentage_frame = tk.Frame(self, bg=SkinInfo["tkinter"].get("bg", "#333333"))
+        volume_percentage_frame.pack(fill="x", padx=(10, 10), pady=(0, 0))
+        self.volume_percentage_label = tk.Label(
+            volume_percentage_frame, 
+            text=f"{self.volume_var.get()}%",
+            fg=SkinInfo["tkinter"].get("label", "#ffffff"),
+            bg=SkinInfo["tkinter"].get("bg", "#333333")
+        )
+        self.volume_percentage_label.pack(fill="x")
+        def update_volume_label(val):
+            val = int(float(val))
+            self.volume_percentage_label.config(text=f"{val}%")
+            self.parent.set_volume(val)
+        self.volume_slider.config(command=update_volume_label)
+        tk.Label(
+            self, text="Change Skin:",
+            fg=SkinInfo["tkinter"].get("label", "#ffffff"),
+            bg=SkinInfo["tkinter"].get("bg", "#333333")
+        ).pack(fill="x", padx=(10, 10), pady=(15, 2))
+        def open_skin_dialog():
+            self.parent._change_skin_pointer()
+        ttk.Button(
+            self, text="Choose Skin File (.bwmpskin)",
+            command=open_skin_dialog, style="Flat.TButton", takefocus=False
+        ).pack(fill="x", padx=(10, 10), pady=(5, 15))
+        ttk.Button(
+            self, text="Close", command=self.destroy, style="Flat.TButton", takefocus=False
+        ).pack(fill="x", padx=(10, 10), pady=(10, 5))
+        self.bind("<Escape>", lambda e: self.destroy())
 
 class Visualizer:
     def __init__(self, left, right, sr):
@@ -279,7 +645,6 @@ class BetterWMP(TkinterDnD.Tk):
         image = Image.open(BytesIO(icon_bytes))
         photo = ImageTk.PhotoImage(image)
         self.iconphoto(True, photo)
-        self.title("BetterWMP - *")
         self.geometry("750x600")
         self.minsize(750, 500)
         self.playlist = []
@@ -288,7 +653,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.appdata_dir = os.path.expandvars(r"%localappdata%\betterwmpfiles")
         shutil.rmtree(self.appdata_dir, ignore_errors=True)
         os.makedirs(self.appdata_dir, exist_ok=True)
-        self.title("BetterWMP: *")
+        self.title("BetterWMP")
         style = ttk.Style()
         style.configure('Custom.TMenubutton',
             background=SkinInfo["tkinter"].get("dropdownbg", "#444444"), highlightthickness=0, borderwidth=0, relief="flat",
@@ -385,7 +750,7 @@ class BetterWMP(TkinterDnD.Tk):
         )
         buf_menu.pack(side=tk.LEFT)
         buf_menu["menu"].delete(0, "end")
-        for opt in [512, 1024, 2048, 4096, 8192]:
+        for opt in [512, 1024, 2048, 4096, 8192, 16384]:
             buf_menu["menu"].add_radiobutton(
                 label=str(opt),
                 variable=self.buffer_var,
@@ -394,8 +759,8 @@ class BetterWMP(TkinterDnD.Tk):
             )
         tk.Label(top, text="Zero-pad", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(10, 2))
         self.zp_label = tk.StringVar(value=f"{self.zp_var.get()}  ▾")
-        zp_menu = tk.OptionMenu(top, self.zp_label, "")
-        zp_menu.config(
+        self.zp_menu = tk.OptionMenu(top, self.zp_label, "")
+        self.zp_menu.config(
             indicatoron=0, 
             bg=tk_colors.get("dropdownbg", "#555555"),
             fg=tk_colors.get("dropdownfg", "#ffffff"),
@@ -403,16 +768,16 @@ class BetterWMP(TkinterDnD.Tk):
             activeforeground=tk_colors.get("dropdownactivefg", "#ffffff"),
             relief="flat", borderwidth=0, highlightthickness=0
         )
-        zp_menu["menu"].config(
+        self.zp_menu["menu"].config(
             bg=tk_colors.get("dropdownbg", "#555555"),
             fg=tk_colors.get("dropdownfg", "#ffffff"),
             activebackground=tk_colors.get("dropdownactivebg", "#505050"),
             activeforeground=tk_colors.get("dropdownactivefg", "#ffffff")
         )
-        zp_menu.pack(side=tk.LEFT)
-        zp_menu["menu"].delete(0, "end")
+        self.zp_menu.pack(side=tk.LEFT)
+        self.zp_menu["menu"].delete(0, "end")
         for opt in [1, 2, 4]:
-            zp_menu["menu"].add_radiobutton(
+            self.zp_menu["menu"].add_radiobutton(
             label=str(opt),
             variable=self.zp_var,
             value=opt,
@@ -462,7 +827,7 @@ class BetterWMP(TkinterDnD.Tk):
         )
         self.restart_btn.pack(side=tk.LEFT, padx=(2, 0))
         self.skin_btn = ttk.Button(
-            top, text="🔧", command=self._change_skin_pointer,
+            top, text="🔧", command=self._open_settings_menu,
             takefocus=0, width=3, style="Flat.TButton"
         )
         self.skin_btn.pack(side=tk.LEFT, padx=(2, 0))
@@ -511,6 +876,16 @@ class BetterWMP(TkinterDnD.Tk):
                 style="Flat.TButton"
             )
             b.pack(side=tk.TOP, fill=tk.X, pady=1)
+        def set_unplug_flag(e):
+            global unplug_flag
+            if self.audio is not None:
+                response = messagebox.askyesno("BetterWMP", "Do you want to reload the audio engine?\nThis will stop playback.\nThis will also set the playback device to the current system default.")
+                if response: 
+                    self.audio.pause()
+                    unplug_flag = 2
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("User requested reload. Offload.\n")
+                        lf.flush()
         self.playlist_listbox.bind('<Double-Button-1>', lambda e: self._playlist_play_selected())
         self.bind_class("TButton", "<Return>", lambda e: "break")
         self.bind_class("TButton", "<space>", lambda e: "break")
@@ -522,16 +897,6 @@ class BetterWMP(TkinterDnD.Tk):
         self.bind("<Down>", lambda e: self._highlight_loaded())
         self.bind("<Control-Up>", lambda e: self._playlist_up())
         self.bind("<Control-Down>", lambda e: self._playlist_down())
-        def set_unplug_flag(e):
-            global unplug_flag
-            if self.audio is not None:
-                response = messagebox.askyesno("BetterWMP", "Do you want to reload the audio engine?\nThis will stop playback.\nThis will also set the playback device to the current system default.")
-                if response: 
-                    self.audio.pause()
-                    unplug_flag = 2
-                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                        lf.write("User requested reload. Offload.\n")
-                        lf.flush()
         self.bind("<F5>", set_unplug_flag)
         if DEBUG:
             self.bind("<Control-Shift-Alt-c>", lambda e: self._simulate_crash())
@@ -553,6 +918,23 @@ class BetterWMP(TkinterDnD.Tk):
             foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#505050"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"))
+    def _open_settings_menu(self):
+        try:
+            if hasattr(self, "settings_menu") and self.settings_menu.winfo_exists():
+                self.settings_menu.focus()
+                return
+            self._settings_window = SettingsMenu(self)
+            self._settings_window.transient(self)
+            self._settings_window.grab_set()
+            self._settings_window.focus()
+            self.wait_window(self._settings_window)
+            self._settings_window = None
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Open Settings Menu failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            messagebox.showerror("BetterWMP", f"Could not open settings menu:\n{e}")
     def _call_emergency_stop(self):
         global EmergencyStop
         response = ctypes.windll.user32.MessageBoxW(
@@ -591,6 +973,9 @@ class BetterWMP(TkinterDnD.Tk):
                 lf.write("NOT MY FAULT\n")
                 lf.flush()
             raise RuntimeError("User requested the crash.")
+    def set_volume(self, vol_percent):
+        if self.audio:
+            self.audio.set_volume(vol_percent)
     def _change_skin_pointer(self):
         conf_dir = os.path.expandvars(r"%localappdata%\\betterwmpconf")
         pointer_path = os.path.join(conf_dir, "skinpointer.conf")
@@ -630,6 +1015,10 @@ class BetterWMP(TkinterDnD.Tk):
                     if key not in data[section]:
                         raise ValueError(f"Missing key: {section}.{key}")
         except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Invalid skin file selected:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
             messagebox.showerror("BetterWMP", f"Invalid skin file:\n{e}")
             return
         try:
@@ -665,9 +1054,30 @@ class BetterWMP(TkinterDnD.Tk):
     def set_buffer(self, val):
         self.buffer_var.set(val)
         self.buffer_label.set(f"{val}  ▾")
+        self._update_zeropad_options()
     def set_zp(self, val):
         self.zp_var.set(val)
         self.zp_label.set(f"{val}  ▾")
+    def _update_zeropad_options(self):
+        buffer_size = self.buffer_var.get()
+        current_zp = self.zp_var.get()
+        if buffer_size == 8192:
+            available_options = [1, 2]
+        elif buffer_size == 16384:
+            available_options = [1]
+        else:
+            available_options = [1, 2, 4]
+        if current_zp not in available_options:
+            new_zp = max(available_options)
+            self.set_zp(new_zp)
+        self.zp_menu["menu"].delete(0, "end")
+        for opt in available_options:
+            self.zp_menu["menu"].add_radiobutton(
+                label=str(opt),
+                variable=self.zp_var,
+                value=opt,
+                command=lambda v=opt: self.set_zp(v)
+            )
     def _update_nav_buttons(self):
         if len(self.playlist) > 1:
             self.prev_btn.configure(state=tk.NORMAL)
@@ -795,7 +1205,19 @@ class BetterWMP(TkinterDnD.Tk):
         else:
             left, right = data[:, 0], data[:, 1]
         if self.audio is None:
-            self.audio = AudioEngine(sr)
+            prefs_path = os.path.join(os.path.expandvars(r"%localappdata%\betterwmpconf"), "userprefs.conf")
+            device_pref = None
+            if os.path.isfile(prefs_path):
+                try:
+                    with open(prefs_path, "r", encoding="utf-8") as f:
+                        prefs = json.load(f)
+                        device_pref = prefs.get("audio_device") or prefs.get("audio_device_id")
+                except Exception as e:
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("Read userprefs.conf failed:\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
+            self.audio = AudioEngine(sr, device=device_pref)
             self.audio.on_track_end = self._handle_track_end
         self.audio.load_track(sr, left, right)
         self.vis = Visualizer(left, right, sr)
@@ -927,6 +1349,9 @@ class BetterWMP(TkinterDnD.Tk):
             print(f"Error removing file: {e}")
         if entry['wav'] == getattr(self, "current_wav", None):
             if self.audio is not None:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Closes audio engine.\n")
+                    lf.flush()
                 self.audio.close()
                 self.audio = None
             self.timestamp_label.config(text="")
@@ -1075,20 +1500,30 @@ class BetterWMP(TkinterDnD.Tk):
             self.playlist_listbox.selection_clear(0, tk.END)
         self._update_nav_buttons()
         self._highlight_loaded()
-    def _offload_audioengine(self):
+    def _offload_audioengine(self, settings_menu=None):
         global unplug_flag
         if self.audio is not None:
             if unplug_flag:
                 self.unplug_backup = {}
                 idxs = [i for i, entry in enumerate(self.playlist)
-                        if entry['wav'] == self.current_wav
-                    ]
+                        if entry['wav'] == self.current_wav]
                 currentidx = idxs[0] if idxs else None
                 self.unplug_backup['loaded'] = currentidx
-                self.unplug_backup['timestamp'] = max(float(self.audio.current_seconds()) - 1.5, 0.0) if self.audio else 0.0
+                m = unplug_flag == 1
+                self.unplug_backup['timestamp'] = max(float(self.audio.current_seconds()) - 1.5 * m, 0.0) if self.audio else 0.0
                 with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                    lf.write(f"Saved:\n{self.unplug_backup}\n")
+                    lf.write(f"Saved state:\n{self.unplug_backup}\n")
                     lf.flush()
+                default_device_name, default_device_driver = AudioDeviceManager.get_default_output_device()
+                if default_device_name and default_device_driver:
+                    if settings_menu:
+                        settings_menu.device_var.set(f"{default_device_name} — {default_device_driver}")
+                        settings_menu.driver_var.set(default_device_driver)
+                        settings_menu.device_map = {}
+                        settings_menu.refresh_devices()
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write(f"Device reverted to default: {default_device_name} — {default_device_driver}\n")
+                        lf.flush()
             if self.audio is not None:
                 self.audio.close()
                 self.audio = None
@@ -1108,8 +1543,12 @@ class BetterWMP(TkinterDnD.Tk):
                     self._open_file(entry['wav'])
                     if self.audio is not None:
                         self._set_play(False)
+            unplug_flag = 0
     def _playlist_clear(self):
         if self.audio is not None:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Closes audio engine.\n")
+                lf.flush()
             self.audio.close()
             self.audio = None
             self._update_nav_buttons()
