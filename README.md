@@ -10,4 +10,4 @@ Features:
 
 ---
 ### Download
-[Download Installer](https://github.com/Epic233-officiale/BetterWMP/releases/tag/v1.3.5)
+[Download Installer](https://github.com/Epic233-officiale/BetterWMP/releases/tag/v1.4.0)
