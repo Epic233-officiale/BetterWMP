@@ -1117,7 +1117,7 @@ class BetterWMP(TkinterDnD.Tk):
                     "Do you want to remove the current playlist before loading?"
                 )
                 if resp:
-                    self.playlist.clear()
+                    self._playlist_clear()
             def worker():
                 first_added_wav = None
                 total = len(valid_items)
