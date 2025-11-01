@@ -2519,7 +2519,13 @@ class BetterWMP(TkinterDnD.Tk):
                     self.triggered_pause = False
                 try:
                     if self.vis is not None and self.audio is not None and not self._is_minimized():
-                        current_key = (getattr(self, "current_wav", None), float(self.display_time))
+                        current_key = (
+                            getattr(self, "current_wav", None), 
+                            float(self.display_time), 
+                            self.buffer_var.get(), 
+                            self.zp_var.get(), 
+                            self.audio.device
+                        )
                         if self._fft_cache_key == current_key and self._fft_cache is not None:
                             # if runframes % 10 == 0:print("use cached fft")
                             # freqs, mid_db, side_db = self._fft_cache
