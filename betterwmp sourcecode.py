@@ -59,6 +59,7 @@ runframes = 1
 unplug_flag = 0
 ALL_FORMATS_EXPLORER = ("WAV Files", "*.wav")
 ALL_FORMATS_TUPLE = (".wav",)
+LOSSY_FORMATS = (".mp3", ".acc", ".opus", "ogg", ".m4a")
 faulthandler.enable(file=fault_file)
 if DEBUG:
     with open(FAULT_LOG, "a", encoding="utf-8") as lf:
@@ -138,6 +139,69 @@ def to_float32(audio):
     return audio / maxv
 
 ICON = r"data:image/x-icon;base64,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/f/w9/3/8Pf9//D3/f/w9/3/IyQl/+Lk4f/9//n/+fHn/97Vxv/8//v//f//////////////UjFE/1IxRP8eEhn/UjFE/1IxRP9SMUT/UjFE/wAAAP/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/z9Xa//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3///////7+/v/+/v7//f39////////////AAAA/wAAAP9SMUT/UjFE/y4cJv9SMUT/UjFE/1IxRP9SMUT/AAAA//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9/8nP1P///////////////////////////wAAAP8AAAD//////1IxRP9SMUT/Sy0+/1IxRP9SMUT/UjFE/1IxRP8EAwT/8Pf9/+/2/P8BAQH/tbq+//D3/f/w9/3/8Pf9//D3/f/w9/3/8Pf9/3yAg/8AAAD/8Pf9//D3/f9SVVj/OyQx////////////////////////////AAAA////////////UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/yEUG//w9/3/8Pf9/wAAAP8jJCX/8Pf9//D3/f/w9/3/8Pf9//D3/f/w9/3/2N7j/woLC//w9/3/AAAA/1IxRP9SMUT///////////////////////////8AAAD///////////9SMUT/UjFE/1IxRP88JDL/UjFE/1IxRP9SMUT/Ty9C/0tNT//w9/3/8Pf9//D3/f/w9/3/6O/1//D3/f/w9/3/8Pf9//D3/f/w9/3/ERES/wcHB/8FBQX/UjFE/08vQf///////////wAAAP///////////wAAAP///////////xgUFv9SMUT/UjFE/wAAAP9SMUT/UjFE/1IxRP9SMUT/Ty9C/wcEBv/w9/3/8Pf9/wAAAP9SMUT/UjFE/1EwQ/9QMEL/vcPH//D3/f/w9/3/8Pf9/w0ODv9SMUT/Mh4q////////////AAAA/wAAAP//////AAAA////////////EhIS/1IxRP9SMUT/JRYf/1IxRP9SMUT/UjFE/1IxRP8MBwr/UjFE/+Xr8f9jZmj/UjFE/1IxRP9SMUT/UjFE/1IxRP8BAQH/8Pf9/2NmaP/w9/3/AAAA/1IxRP8AAAD//////wAAAP//////AAAA//////8AAAD////////////9/f3/UjFE/1IxRP9SMUT/Sy0+/1IxRP9SMUT/UjFE/wAAAP9SMUT/AAAA//D3/f9RMUP/UjFE/1IxRP9SMUT/UjFE/1ExQ//w9/3/8Pf9/7vBxf8AAAD/UjFE/wEBAf8AAAD/AAAA//////8AAAD//f39/wAAAP////////////////8KCQn/UjFE/1IxRP8FBAT/UjFE/1IxRP9SMUT/NB8r/1IxRP9SMUT/7vX7/zwkMv9SMUT/UjFE/1IxRP9SMUT/UjFE/ykqK//w9/3/CwoL/1IxRP9SMUT/v7+//wAAAP8AAAD//////wQEBP8AAAD/AAAA/////////////////1NTU/9SMUT/UjFE/1IxRP9NLj//UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD/FBIX/1IxRP9SMUT/UjFE/1IxRP9SMUT/AgIC//D3/f9QMEP/UjFE/1IxRP///////////////////////////wAAAP8AAAD//////////////////////x8XG/9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD/UjFE/1IxRP9SMUT/UjFE/1IxRP8pGCL/AAAA/1IxRP9SMUT/EQwP////////////////////////////AAAA/wAAAP//////////////////////MDAw/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/0wtP/9QMEL/UjFE/1IxRP8DAwP///////////////////////////8AAAD/AAAA////////////////////////////Ihkf/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE///////////////////////////////////////19fX////////////////////////////c3Nz/UTFD/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP8AAAD///////////////////////////////////////////////////////////////////////////9HR0f/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/SCs8//////////////////////////////////////////////////////////////////////////////////////8FBQX/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/z8mNP9cXFz///////////////////////////////////////////////////////////////////////////////////////////9vb2//NSUt/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/1IxRP9SMUT/UjFE/zgiL/8GBgb////////////////////////////////////////////////////////////////////////////////////////////////////////////9////AAAA/ykZIv9SMUT/UjFE/1IxRP9SMUT/Sy0+/w0LDP8kJCT//f/9//////////////////////////////7///3//f/////////////////////////////+////////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+CF_HDROP = 15
+GMEM_MOVEABLE = 0x0002
+
+class DropFiles(ctypes.Structure):
+    _fields_ = [
+        ("pFiles", ctypes.c_uint32),
+        ("pt_x", ctypes.c_long),
+        ("pt_y", ctypes.c_long),
+        ("fNC", ctypes.c_int),
+        ("fWide", ctypes.c_int),
+    ]
+
+def copy_file_to_clipboard(path: str) -> None:
+    if not os.path.isfile(path):
+        raise FileNotFoundError(path)
+    path = os.path.abspath(path)
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+    kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = ctypes.c_void_p
+    kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalUnlock.restype = ctypes.c_int
+    kernel32.GlobalFree.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalFree.restype = ctypes.c_void_p
+    user32.OpenClipboard.argtypes = [ctypes.c_void_p]
+    user32.OpenClipboard.restype = ctypes.c_int
+    user32.EmptyClipboard.restype = ctypes.c_int
+    user32.SetClipboardData.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+    user32.SetClipboardData.restype = ctypes.c_void_p
+    user32.CloseClipboard.restype = ctypes.c_int
+    df = DropFiles()
+    df.pFiles = ctypes.sizeof(DropFiles)
+    df.fWide = 1 
+    wide_paths = (path + "\0").encode("utf-16le") + b"\0\0"
+    header = ctypes.string_at(ctypes.byref(df), ctypes.sizeof(df))
+    data = header + wide_paths
+    size = len(data)
+    GMEM_ZEROINIT = 0x0040
+    GHND = GMEM_MOVEABLE | GMEM_ZEROINIT
+    hGlobal = kernel32.GlobalAlloc(GHND, size)
+    if not hGlobal:
+        raise OSError("GlobalAlloc failed")
+    pData = kernel32.GlobalLock(hGlobal)
+    if not pData:
+        kernel32.GlobalFree(hGlobal)
+        raise OSError("GlobalLock failed")
+    try:
+        ctypes.memmove(pData, data, size)
+    finally:
+        kernel32.GlobalUnlock(hGlobal)
+    if not user32.OpenClipboard(None):
+        kernel32.GlobalFree(hGlobal)
+        raise OSError("OpenClipboard failed")
+    try:
+        if not user32.EmptyClipboard():
+            raise OSError("EmptyClipboard failed")
+        res = user32.SetClipboardData(CF_HDROP, hGlobal)
+        if not res:
+            raise OSError("SetClipboardData failed")
+    finally:
+        user32.CloseClipboard()
 
 class AudioDeviceManager:
     @staticmethod
@@ -167,15 +231,30 @@ class AudioDeviceManager:
                 lf.flush()
         return output_devices
     @staticmethod
-    def get_default_output_device():
+    def get_default_output_device(exclude=None):
         try:
-            default_out_idx = sd.default.device[1]
-            device_info = sd.query_devices(default_out_idx)
-            hostapi = sd.query_hostapis(device_info["hostapi"])["name"]
-            return device_info["name"], hostapi
+            devices = sd.query_devices()
+            for i, device in enumerate(devices):
+                if device.get("max_output_channels", 0) == 2:
+                    dev_name = device.get("name", "").strip()
+                    print(f"Found device {i} with 2 output channels: {dev_name}")
+                    try:
+                        hostapi = sd.query_hostapis(device["hostapi"])["name"].strip()
+                    except Exception:
+                        hostapi = "Unknown"
+                    if exclude:
+                        try:
+                            ex = exclude.strip().lower()
+                        except Exception:
+                            ex = str(exclude).lower()
+
+                        if dev_name.lower() in ex:
+                            continue
+                    return dev_name, hostapi
+            return None, None
         except Exception:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("Failed to get default output device:\n")
+                lf.write("Failed to get output device (Sound Mapper-like):\n")
                 traceback.print_exc(file=lf)
                 lf.flush()
             return None, None
@@ -206,7 +285,7 @@ class AudioDeviceManager:
         return device_map
 
 class AudioEngine:
-    def __init__(self, sr=44100, device=None):
+    def __init__(self, sr=SAMPLERATE_PREF, device=None):
         global callbackFlag, SAMPLERATE_PREF, unplug_flag
         self.sr = sr
         self.device = None
@@ -251,6 +330,7 @@ class AudioEngine:
                 else:
                     self.device = None
                 try:
+                    # print (self.sr)
                     self._stream = sd.OutputStream(
                         samplerate=self.sr,
                         channels=2,
@@ -371,8 +451,8 @@ class AudioEngine:
         else:
             remain = n - idx
             if remain > 0:
-                outdata[:remain, 0] = left[idx:] * volume**2
-                outdata[:remain, 1] = right[idx:] * volume**2
+                outdata[:remain, 0] = left[idx:] * volume**1.66
+                outdata[:remain, 1] = right[idx:] * volume**1.66
             outdata[remain:, :].fill(0)
             self._playing.clear()
             self.idx = 0
@@ -449,7 +529,15 @@ class AudioEngine:
     def close(self):
         self.transition = False
         try:
-            if self._stream.active:
+            try:
+                if self._stream: a = self._stream.active
+                else: a = False
+            except Exception as e:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write(f"AudioEngine forced exception likely due to refresh:\n{e}\n")
+                    lf.flush()
+                a = False
+            if a:
                 self._stream.stop()
             self._stream.close()
         except Exception as e:
@@ -514,8 +602,16 @@ class SettingsMenu(tk.Toplevel):
     def __init__(self, parent):
         global MEDIA_KEYS_ENABLED, SAMPLERATE_PREF
         super().__init__(parent)
+        window_dimensions = (350, 520)
         self.title("BetterWMP Settings")
-        self.geometry("350x520")
+        self.geometry(f"{window_dimensions[0]}x{window_dimensions[1]}")
+        parent_x = parent.winfo_rootx()
+        parent_y = parent.winfo_rooty()
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        new_x = min(parent_x + 50, screen_width - window_dimensions[0])
+        new_y = min(parent_y + 50, screen_height - window_dimensions[1] - 80)
+        self.geometry(f"+{new_x}+{new_y}")
         self.resizable(False, False)
         self.configure(bg=SkinInfo["tkinter"].get("bg", "#333333"))
         self.transient(parent)
@@ -561,8 +657,8 @@ class SettingsMenu(tk.Toplevel):
                     lf.flush()
                 apis = ["MME", "Windows DirectSound", "Windows WASAPI"]
             return apis
-        hostapis = get_hostapi_list()
-        selected_driver = None
+        hostapis = self.get_hostapi_list()
+        selected_driver = self.get_previous_driver(prefs_path, hostapis)
         if prev_device:
             try:
                 if "—" in prev_device:
@@ -596,7 +692,7 @@ class SettingsMenu(tk.Toplevel):
             fg=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#685868"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
-            relief="flat", highlightthickness=0, indicatoron=0, 
+            relief="flat", highlightthickness=0, indicatoron=0,
             borderwidth=0, bd=0
         )
         self.driver_menu["menu"].config(
@@ -616,38 +712,12 @@ class SettingsMenu(tk.Toplevel):
             "ASIO":"This driver has extreme low latency. \nHowever, using it would stop other applications from playing through the same device.",
         }
         self.driver_tooltip = self.ToolTip(self.driver_menu, driver_tooltips, self.driver_var)
-        def get_device_list_for_driver(driver_name):
-            device_map = []
-            try:
-                devices = sd.query_devices()
-                for i, d in enumerate(devices):
-                    hostapi = sd.query_hostapis(d["hostapi"])["name"]
-                    if hostapi.lower() == driver_name.lower() and d.get("max_output_channels", 0) == 2:
-                        device_map.append((f"{d['name']} — {hostapi}", i))
-            except Exception:
-                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                    lf.write("Failed to get device list for driver:\n")
-                    traceback.print_exc(file=lf)
-                    lf.flush()
-                pass
-            if not device_map:
-                device_map = [("Default Output", None)]
-            return device_map
-        def refresh_device_list(*_):
-            selected_driver = self.driver_var.get()
-            device_items = get_device_list_for_driver(selected_driver)
-            display_names = [name for name, _ in device_items]
-            self.device_map = {name: dev_id for name, dev_id in device_items}
-            current_device = self.device_var.get()
-            menu = self.device_menu["menu"]
-            menu.delete(0, "end")
-            for name in display_names:
-                menu.add_radiobutton(label=name, variable=self.device_var, value=name)
-            if current_device not in display_names:
-                self.device_var.set(display_names[0])
-        self.refresh_devices = refresh_device_list
+        button_row1 = tk.Frame(self, bg=SkinInfo["tkinter"].get("bg", "#333333"))
+        self.refresh_button = ttk.Button(
+            button_row1, text="Refresh Devices", style="Flat.TButton", takefocus=False
+        )
         self.device_map = {}
-        initial_device_items = get_device_list_for_driver(self.driver_var.get())
+        initial_device_items = self.get_device_list_for_driver(self.driver_var.get())
         display_names = [name for name, _ in initial_device_items]
         self.device_map = {name: dev_id for name, dev_id in initial_device_items}
         initial_device = None
@@ -680,12 +750,10 @@ class SettingsMenu(tk.Toplevel):
             borderwidth=0
         )
         self.device_menu.pack(fill="x", padx=(10, 10), pady=(0, 8))
-        self.driver_var.trace_add("write", refresh_device_list)
-        button_row1 = tk.Frame(self, bg=SkinInfo["tkinter"].get("bg", "#333333"))
         button_row1.pack(fill="x", padx=(10, 10), pady=(0, 5))
-        ttk.Button(
-            button_row1, text="Refresh Devices", command=refresh_device_list, style="Flat.TButton", takefocus=False
-        ).pack(side="left", padx=(0, 5), pady=(0, 10))
+        self.refresh_button.pack(side="left", padx=(0, 5), pady=(0, 10))
+        self.driver_var.trace_add("write", lambda *args: self.refresh_device_list(hard=False))
+        self.refresh_button.configure(command=lambda: self.refresh_device_list(hard = True))
         def test_output():
             def test_worker():
                 try:
@@ -721,6 +789,13 @@ class SettingsMenu(tk.Toplevel):
         ttk.Button(
             button_row1, text="Test Output", command=test_output, style="Flat.TButton", takefocus=False
         ).pack(side="left", padx=(5, 5), pady=(0, 10))
+        self.apply_button = ttk.Button(
+            button_row1,
+            text="Apply and Reload",
+            style="Flat.TButton",
+            takefocus=False
+        )
+        self.apply_button.pack(side="left", padx=(5, 0), pady=(0, 10))
         def apply_output_device():
             global unplug_flag, SAMPLERATE_PREF
             selected_name = self.device_var.get()
@@ -746,17 +821,18 @@ class SettingsMenu(tk.Toplevel):
                     traceback.print_exc(file=lf)
                     lf.flush()
                 samplerate = existing_prefs.get("samplerate", SAMPLERATE_PREF) or 44100
-            new_prefs = {
-                "audio_device": selected_name,
-                "audio_device_id": device_id,
-                "samplerate": int(samplerate) if samplerate is not None else (SAMPLERATE_PREF or 44100),
-                "last_audio_device": existing_prefs.get("audio_device"),
-                "last_audio_device_id": existing_prefs.get("audio_device_id"),
-                "last_samplerate": existing_prefs.get("samplerate")
-            }
             try:
-                with open(prefs_path, "w", encoding="utf-8") as f:
-                    json.dump(new_prefs, f, indent=2)
+                if device_id != existing_prefs.get("audio_device_id"):
+                    new_prefs = {
+                        "audio_device": selected_name,
+                        "audio_device_id": device_id,
+                        "samplerate": int(samplerate) if samplerate is not None else (SAMPLERATE_PREF or 44100),
+                        "last_audio_device": existing_prefs.get("audio_device"),
+                        "last_audio_device_id": existing_prefs.get("audio_device_id"),
+                        "last_samplerate": existing_prefs.get("samplerate")
+                    }
+                    with open(prefs_path, "w", encoding="utf-8") as f:
+                        json.dump(new_prefs, f, indent=2)
             except Exception:
                 messagebox.showerror("BetterWMP", "Could not save preferences.")
                 with open(FAULT_LOG, "a", encoding="utf-8") as lf:
@@ -772,19 +848,44 @@ class SettingsMenu(tk.Toplevel):
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write(f"Samplerate preference updated: prev={prev_sr} -> new={SAMPLERATE_PREF} (device: {selected_name}, id={device_id})\n")
                 lf.flush()
-            messagebox.showinfo(
-                "BetterWMP",
-                f"Output device set to:\n{selected_name}"
-            )
             global unplug_flag
             unplug_flag = 2
             if self.parent.audio:
                 self.parent.audio.pause()
+            self.refresh_devices = self.refresh_device_list
+            self.refresh_button.configure(state="disabled")
+            self.refresh_button.update_idletasks()
+            self.apply_button.configure(state="disabled")
+            self.apply_button.update_idletasks()
+            if selected_name: 
+                try:
+                    current_device_info = sd.query_devices(device_id)
+                    current_device_name = f"{current_device_info.get('name', '').strip()} — {sd.query_hostapis(current_device_info['hostapi'])['name'].strip()}"
+                    if current_device_name.lower() == selected_name.lower():
+                        messagebox.showinfo(
+                            "BetterWMP",
+                            f"Output device set to:\n{selected_name}"
+                        )
+                    else:
+                        messagebox.showwarning(
+                            "BetterWMP",
+                            f"Selected device '{selected_name}' does not match the current device '{current_device_name}'."
+                        )
+                except Exception as e:
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("Failed to verify selected device:\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
+                    messagebox.showerror(
+                        "BetterWMP",
+                        f"Could not verify the selected device:\n{e}"
+                    )
+            self.refresh_button.configure(state="normal")
+            self.refresh_button.update_idletasks()
+            self.apply_button.configure(state="normal")
+            self.apply_button.update_idletasks()
             # self.destroy()
-        ttk.Button(
-            button_row1, text="Apply and Reload",
-            command=apply_output_device, style="Flat.TButton", takefocus=False
-        ).pack(side="left", padx=(5, 0), pady=(0, 10))
+        self.apply_button.configure(command=apply_output_device)
         tk.Label(
             self, text="Playback Volume:",
             fg=SkinInfo["tkinter"].get("label", "#ffffff"),
@@ -912,11 +1013,125 @@ class SettingsMenu(tk.Toplevel):
             self, text="Close", command=self.destroy, style="Flat.TButton", takefocus=False
         ).pack(fill="x", padx=(10, 10), pady=(10, 5))
         self.bind("<Escape>", lambda e: self.destroy())
-        
     def hide_tooltip(self):
         if self.tooltip_window:
             self.tooltip_window.destroy()
             self.tooltip_window = None
+    def refresh_device_list(self, driver_name=None, hard=False, *_):
+        global unplug_flag
+        try:
+            if hard:
+                # self.refresh_button.configure(state="disabled")
+                if self.parent.audio:
+                    self.parent.audio.pause()
+                unplug_flag = 2
+                self._rescan_audio_hardware()
+            selected_driver = driver_name if driver_name else self.driver_var.get()
+            device_items = self.get_device_list_for_driver(selected_driver)
+            if not device_items:
+                raise ValueError("No devices found for the selected driver.")
+            display_names = [name for name, _ in device_items]
+            self.device_map = {name: dev_id for name, dev_id in device_items}
+            current_device = self.device_var.get()
+            menu = self.device_menu["menu"]
+            menu.delete(0, "end")
+            for name in display_names:
+                menu.add_radiobutton(label=name, variable=self.device_var, value=name)
+            if current_device not in display_names:
+                self.device_var.set(display_names[0])
+            # if hard:
+                # self.refresh_button.configure(state="normal")
+            self.device_menu.update_idletasks()
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write(f"Error refreshing device list: {e}\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+    def get_device_list_for_driver(self, driver_name):
+        device_map = []
+        try:
+            devices = sd.query_devices()
+            for i, d in enumerate(devices):
+                hostapi = sd.query_hostapis(d["hostapi"])["name"]
+                if hostapi.lower() == driver_name.lower() and d.get("max_output_channels", 0) == 2:
+                    device_map.append((f"{d['name']} — {hostapi}", i))
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Failed to get device list for driver:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            pass
+        if not device_map:
+            device_map = [("Default Output", None)]
+        return device_map
+    def _rescan_audio_hardware(self):
+        try:
+            sd._terminate()
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Rescan error: \n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+        try:
+            sd._initialize()
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Rescan error: \n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+    def get_hostapi_list(self):
+        apis = []
+        try:
+            apis = [sd.query_hostapis(i)["name"] for i in range(len(sd.query_hostapis()))]
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Failed to get host API list:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            apis = ["MME", "Windows DirectSound", "Windows WASAPI"]
+        return apis
+    def get_previous_driver(self, prefs_path, hostapis):
+        selected_driver = None
+        prev_device = None
+        prev_device_id = None
+        if os.path.isfile(prefs_path):
+            try:
+                with open(prefs_path, "r", encoding="utf-8") as f:
+                    prefs = json.load(f)
+                    prev_device = prefs.get("audio_device")
+                    prev_device_id = prefs.get("audio_device_id")
+            except Exception:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to read user preferences:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+        if prev_device:
+            try:
+                if "—" in prev_device:
+                    parts = [s.strip() for s in prev_device.split("—", 1)]
+                    if len(parts) == 2:
+                        candidate = parts[1]
+                        if candidate in hostapis:
+                            selected_driver = candidate
+            except Exception:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to parse previous device:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+        if selected_driver is None and prev_device_id is not None:
+            try:
+                info = sd.query_devices(prev_device_id)
+                candidate = sd.query_hostapis(info["hostapi"])["name"]
+                if candidate in hostapis:
+                    selected_driver = candidate
+            except Exception:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to get previous device driver:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+        if selected_driver is None:
+            selected_driver = hostapis[0] if hostapis else ""
+        return selected_driver
 
 class Visualizer:
     def __init__(self, left, right, sr):
@@ -1254,10 +1469,8 @@ class BetterWMP(TkinterDnD.Tk):
             )
             b.pack(side=tk.TOP, fill=tk.X, pady=1)
         self.playlist_context_menu = tk.Menu(self, tearoff=0)
-        '''
-        self.playlist_context_menu.add_command(label="Save Playlist", command=self._save_playlist)
-        self.playlist_context_menu.add_command(label="Load Playlist", command=self._load_playlist)
-        '''
+        # self.playlist_context_menu.add_command(label="Save Playlist", command=self._save_playlist)
+        # self.playlist_context_menu.add_command(label="Load Playlist", command=self._load_playlist)
         tk_colors = SkinInfo.get("tkinter", {})
         try:
             self.playlist_context_menu.config(
@@ -1287,8 +1500,11 @@ class BetterWMP(TkinterDnD.Tk):
                     if self.playlist:
                         self.playlist_context_menu.add_command(label="Save Playlist", command=self._save_playlist)
                     self.playlist_context_menu.add_command(label="Load Playlist", command=self._load_playlist)
-                    self.playlist_context_menu.add_separator()
-                    self.playlist_context_menu.add_command(label="Append Files...", command=self._playlist_append)
+                    idxx = self.playlist_listbox.curselection()
+                    if idxx:
+                        self.playlist_context_menu.add_separator()
+                        self.playlist_context_menu.add_command(label="Copy File", command=lambda: self._context_copy_file())
+                        self.playlist_context_menu.add_command(label="Reveal in Explorer", command=lambda: self._reveal_in_explorer())
                 except Exception:
                     with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                         lf.write("Failed to rebuild playlist context menu:\n")
@@ -1319,7 +1535,61 @@ class BetterWMP(TkinterDnD.Tk):
                     lf.write("Failed to show playlist context menu:\n")
                     traceback.print_exc(file=lf)
                     lf.flush()
+        def _on_space_press(event):
+            self._toggle_play()
+            return "break"
+        self.playlist_listbox.bind('<space>', _on_space_press)
         self.playlist_listbox.bind("<Button-3>", _on_playlist_context_menu)
+        self._listbox_b1_active = False
+        self._listbox_b1_last_index = None
+        def _on_listbox_button1_press(event):
+            if event.widget is self.playlist_listbox:
+                self._listbox_b1_active = True
+                lb = self.playlist_listbox
+                y_rel = event.y
+                idx = lb.nearest(y_rel)
+                bbox = lb.bbox(idx)
+                in_item = bbox is not None and (bbox[1] <= y_rel < bbox[1] + bbox[3])
+                if in_item:
+                    lb.selection_clear(0, tk.END)
+                    lb.selection_set(idx)
+                    lb.see(idx)
+                    self._listbox_b1_last_index = idx
+                else:
+                    lb.selection_clear(0, tk.END)
+                    self._listbox_b1_last_index = None
+            return None
+        def _on_global_button_release(event):
+            self._listbox_b1_active = False
+            self._listbox_b1_last_index = None
+        def _on_global_b1_motion(event):
+            if not getattr(self, "_listbox_b1_active", False):
+                return
+            lb = self.playlist_listbox
+            x_root, y_root = event.x_root, event.y_root
+            lx, ly = lb.winfo_rootx(), lb.winfo_rooty()
+            lw, lh = lb.winfo_width(), lb.winfo_height()
+            if not (lx <= x_root < lx + lw and ly <= y_root < ly + lh):
+                lb.selection_clear(0, tk.END)
+                self._listbox_b1_last_index = None
+                return "break"
+            y_rel = y_root - ly
+            idx = lb.nearest(y_rel)
+            bbox = lb.bbox(idx)
+            in_item = bbox is not None and (bbox[1] <= y_rel < bbox[1] + bbox[3])
+            if in_item:
+                if self._listbox_b1_last_index != idx:
+                    lb.selection_clear(0, tk.END)
+                    lb.selection_set(idx)
+                    lb.see(idx)
+                    self._listbox_b1_last_index = idx
+            else:
+                lb.selection_clear(0, tk.END)
+                self._listbox_b1_last_index = None
+            return None
+        self.playlist_listbox.bind("<Button-1>", _on_listbox_button1_press, add="+")
+        self.bind("<B1-Motion>", _on_global_b1_motion)
+        self.bind("<ButtonRelease-1>", _on_global_button_release)
         def set_unplug_flag(e):
             global unplug_flag
             if self.audio is not None:
@@ -1339,8 +1609,6 @@ class BetterWMP(TkinterDnD.Tk):
         self.bind("<Delete>", lambda e: self._playlist_remove())
         self.bind("<Up>", lambda e: self._highlight_loaded())
         self.bind("<Down>", lambda e: self._highlight_loaded())
-        self.bind("<Control-Up>", lambda e: self._playlist_up())
-        self.bind("<Control-Down>", lambda e: self._playlist_down())
         self.bind("<F5>", set_unplug_flag)
         keyboard.hook(self.on_key_event)
         if DEBUG:
@@ -1363,6 +1631,64 @@ class BetterWMP(TkinterDnD.Tk):
             foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#685868"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"))
+    def _context_copy_file(self):
+        try:
+            idx = None
+            if getattr(self, "_context_save_index", None) is not None:
+                idx = self._context_save_index
+            else:
+                cur = self.playlist_listbox.curselection()
+                if cur:
+                    idx = cur[0]
+            if idx is None or not (0 <= idx < len(self.playlist)):
+                return
+            entry = self.playlist[idx]
+            path = entry.get("orig") or entry.get("wav")
+            if not path or not os.path.isfile(path):
+                messagebox.showerror("BetterWMP", "Selected file is not available.")
+                return
+            try:
+                copy_file_to_clipboard(path)
+            except Exception as e:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Copy to clipboard failed:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+                messagebox.showerror("BetterWMP", f"Could not copy file to clipboard:\n{e}")
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Unexpected error in _context_copy_file:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+    def _reveal_in_explorer(self):
+        try:
+            idx = None
+            if getattr(self, "_context_save_index", None) is not None:
+                idx = self._context_save_index
+            else:
+                cur = self.playlist_listbox.curselection()
+                if cur:
+                    idx = cur[0]
+            if idx is None or not (0 <= idx < len(self.playlist)):
+                return
+            entry = self.playlist[idx]
+            path = entry.get("orig") or entry.get("wav")
+            if not path or not os.path.isfile(path):
+                messagebox.showerror("BetterWMP", "Selected file is not available.")
+                return
+            try:
+                subprocess.run(["explorer", "/select,", os.path.normpath(path)], check=False)
+            except Exception as e:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Reveal in Explorer failed:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+                messagebox.showerror("BetterWMP", f"Could not reveal file in Explorer:\n{e}")
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Unexpected error in _reveal_in_explorer:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
     def on_key_event(self, e):
         global MEDIA_KEYS_ENABLED
         if MEDIA_KEYS_ENABLED and e.event_type == "down" and not self.triggered_pause:
@@ -1422,16 +1748,6 @@ class BetterWMP(TkinterDnD.Tk):
                 self.after(0, self.close_progress_window)
                 self._update_nav_buttons()
                 self._highlight_loaded()
-                '''
-                if first_added_wav:
-                    try:
-                        self.after(0, lambda wav=first_added_wav: self._open_file(wav))
-                    except Exception:
-                        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                            lf.write(f"Failed to open first added file after loading playlist: {first_added_wav}\n")
-                            traceback.print_exc(file=lf)
-                            lf.flush()
-                '''
             threading.Thread(target=worker, daemon=True).start()
         except Exception as e:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
@@ -1782,6 +2098,10 @@ class BetterWMP(TkinterDnD.Tk):
         if target_sr and target_sr != sr:
             # print("switching sample rate")
             try:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write(f"Resampling: {sr} -> {target_sr}\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
                 new_len = int(round(len(left) * (target_sr / float(sr))))
                 if new_len <= 0:
                     raise ValueError("Resample target length <= 0")
@@ -1809,7 +2129,21 @@ class BetterWMP(TkinterDnD.Tk):
                         traceback.print_exc(file=lf)
                         lf.flush()
             try:
-                self.audio = AudioEngine(sr, device=device_pref)
+                '''
+                try:
+                    if device_pref is not None:
+                        device_info = sd.query_devices(device_pref)
+                        self.sr = int(device_info.get("default_samplerate", sr))
+                    else:
+                        self.sr = sr
+                except Exception as e:
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("Failed to get sample rate of the device:\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
+                '''
+                self.sr = sr
+                self.audio = AudioEngine(self.sr, device=device_pref)
                 self.audio.on_track_end = self._handle_track_end
                 try:
                     self.set_volume(getattr(self, "session_volume", 100))
@@ -1820,12 +2154,12 @@ class BetterWMP(TkinterDnD.Tk):
                     lf.write("AudioEngine init failed in _open_file:\n")
                     traceback.print_exc(file=lf)
                     lf.flush()
-                messagebox.showerror(
-                    "BetterWMP",
-                    "Audio engine could not be initialized with the selected output device.\n"
-                    "Please open Settings and pick a valid output device, then try again.\n\n"
-                    "You can try looking for the same device under another driver. If you use Virtual Cables, try WDM-KS as the driver."
-                )
+                if unplug_flag != 1:
+                    messagebox.showerror(
+                        "BetterWMP",
+                        "Audio engine could not be initialized with the selected output device.\n"
+                        "BetterWMP will automatically look for fallbacks."
+                    )
                 last_name = None
                 last_id = None
                 try:
@@ -1835,21 +2169,27 @@ class BetterWMP(TkinterDnD.Tk):
                             prefs = json.load(pf)
                         last_name = prefs.get("last_audio_device")
                         last_id = prefs.get("last_audio_device_id")
-                        if last_name is not None or last_id is not None:
+                        if last_id is not None:
+                            try:
+                                last_device_info = sd.query_devices(last_id)
+                                last_device_sr = int(last_device_info.get("default_samplerate", sr))
+                                if last_device_sr != sr:
+                                    raise ValueError("Sample rate mismatch detected. Using default device fallback.")
+                            except Exception:
+                                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                                    lf.write("Failed to query sample rate of last known-good device:\n")
+                                    traceback.print_exc(file=lf)
+                                    lf.flush()
+                        # print(last_name != device_pref)
+                        if (last_name is not None or last_id is not None):
                             new_prefs = dict(prefs)
                             new_prefs["audio_device"] = last_name
                             new_prefs["audio_device_id"] = last_id
                             with open(prefs_path, "w", encoding="utf-8") as pf:
                                 json.dump(new_prefs, pf, indent=2)
-
                             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                                 lf.write(f"Reverted audio device to last known-good: {last_name} (id={last_id})\n")
                                 lf.flush()
-
-                            try:
-                                messagebox.showinfo("BetterWMP", "Preferences reverted to the previous audio device.\nOpen Settings to review the selection.")
-                            except Exception:
-                                pass
                             try:
                                 if hasattr(self, "_settings_window") and self._settings_window and self._settings_window.winfo_exists():
                                     sw = self._settings_window
@@ -1887,7 +2227,42 @@ class BetterWMP(TkinterDnD.Tk):
                                 lf.write("Fallback AudioEngine start failed with last device:\n")
                                 traceback.print_exc(file=lf)
                                 lf.flush()
-                            self.audio = None
+                            try:
+                                default_device_name, default_device_driver = AudioDeviceManager.get_default_output_device()
+                                print(default_device_name, default_device_driver)
+                                device_id = None
+                                if default_device_name and default_device_driver:
+                                    try:
+                                        for i, d in enumerate(sd.query_devices()):
+                                            try:
+                                                d_name = d.get("name", "").strip()
+                                                d_host = sd.query_hostapis(d["hostapi"])["name"].strip()
+                                            except Exception:
+                                                d_name = d.get("name", "").strip()
+                                                d_host = ""
+                                            if d_name == default_device_name and d_host == default_device_driver:
+                                                device_id = i
+                                                break
+                                    except Exception:
+                                        device_id = None
+                                    self.audio = AudioEngine(sr, device=f"{default_device_name} — {default_device_driver}")
+                                    self.audio.on_track_end = self._handle_track_end
+                                    fallback_ok = True
+                                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                                        lf.write(f"AudioEngine started with mapper device: {default_device_name} — {default_device_driver}\n")
+                                        lf.flush()
+                                new_prefs = dict(prefs)
+                                new_prefs["audio_device"] = f"{default_device_name} — {default_device_driver}"
+                                new_prefs["audio_device_id"] = device_id
+                                with open(prefs_path, "w", encoding="utf-8") as pf:
+                                    json.dump(new_prefs, pf, indent=2)
+                                device_pref = f"{default_device_name} — {default_device_driver}"
+                            except Exception:
+                                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                                    lf.write("Fallback AudioEngine start failed with mapper device:\n")
+                                    traceback.print_exc(file=lf)
+                                    lf.flush()
+                                self.audio = None
                 except Exception:
                     with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                         lf.write("Unexpected error while attempting fallback AudioEngine start:\n")
@@ -1975,13 +2350,27 @@ class BetterWMP(TkinterDnD.Tk):
         name = os.path.basename(orig_path)
         wav_path = os.path.join(self.appdata_dir, f"{int(time.time()*1000)}_{name}.wav")
         was_empty = len(self.playlist) == 0
+        try:
+            if name.lower().endswith(LOSSY_FORMATS):
+                input_bits = 16
+            else:
+                probe = AudioSegment.from_file(orig_path)
+                input_bits = probe.sample_width * 8
+        except Exception as e:
+            input_bits = 16
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Not able to read file bit-depth:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            print(e)
+        target_codec = "pcm_s24le" if input_bits >= 24 else "pcm_s16le"
         ffmpeg_exe = AudioSegment.converter or "ffmpeg"
         cmd = [
             ffmpeg_exe,
             "-y",
             "-i", orig_path,
             "-vn",
-            "-acodec", "pcm_s16le",
+            "-acodec", target_codec,
             "-ar", f"{SAMPLERATE_PREF or 44100}",
             "-ac", "2",
             wav_path
@@ -2200,16 +2589,17 @@ class BetterWMP(TkinterDnD.Tk):
                 with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                     lf.write(f"Saved state:\n{self.unplug_backup}\n")
                     lf.flush()
-                default_device_name, default_device_driver = AudioDeviceManager.get_default_output_device()
-                if default_device_name and default_device_driver:
-                    if settings_menu:
-                        settings_menu.device_var.set(f"{default_device_name} — {default_device_driver}")
-                        settings_menu.driver_var.set(default_device_driver)
-                        settings_menu.device_map = {}
-                        settings_menu.refresh_devices()
-                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                        lf.write(f"Device reverted to default: {default_device_name} — {default_device_driver}\n")
-                        lf.flush()
+                if unplug_flag == 1: 
+                    default_device_name, default_device_driver = AudioDeviceManager.get_default_output_device()
+                    if default_device_name and default_device_driver:
+                        if settings_menu and isinstance(settings_menu, SettingsMenu):
+                            settings_menu.device_var.set(f"{default_device_name} — {default_device_driver}")
+                            settings_menu.driver_var.set(default_device_driver)
+                            settings_menu.device_map = {}
+                            settings_menu.refresh_devices()
+                        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                            lf.write(f"Device reverted to default: {default_device_name} — {default_device_driver}\n")
+                            lf.flush()
             if self.audio is not None:
                 self.audio.close()
                 self.audio = None
@@ -2472,14 +2862,15 @@ class BetterWMP(TkinterDnD.Tk):
                             "BetterWMP",
                             f"Could not restore playback position after output-device change. The position is {round(self.unplug_backup.get('timestamp', 0.0), 2)} seconds.\n"
                             "The audio engine has been stopped. Please open Settings and select a valid output device.\n\n"
-                            "You can try looking for the same device of another driver, that might help. If you use Virtual Cables, try using WDM-KS as the driver."
+                            "You can try looking for the same device of another driver, that might help."
                         )
                     finally:
                         self.unplug_backup = None
                 if unplug_flag:
-                    if unplug_flag <= 1:
-                        show_native_messagebox("BetterWMP","Need to reconnect audio device. \nPlayback will stop. You can now reconnect your audio device before pressing OK.")
+                    a = unplug_flag
                     self._offload_audioengine()
+                    if a == 1:
+                        messagebox.showerror("BetterWMP","The audio stream is stuck (e.g. due to unplugged earphones). \nBetterWMP will attempt to connect to the last device.")
                     unplug_flag = 0
                 if self.audio is not None:
                     was_playing = self.audio.is_playing()
@@ -2693,6 +3084,77 @@ def main():
     global SkinInfo, app, runframes, EmergencyStop, DEBUG
     setup_skin_json()
     SkinInfo = get_skin()
+    try:
+        conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
+        os.makedirs(conf_dir, exist_ok=True)
+        prefs_path = os.path.join(conf_dir, "userprefs.conf")
+        prefs = {}
+        if os.path.isfile(prefs_path):
+            try:
+                with open(prefs_path, "r", encoding="utf-8") as pf:
+                    prefs = json.load(pf) or {}
+            except Exception:
+                prefs = {}
+        if (prefs.get("audio_device") in (None, "")) and (prefs.get("audio_device_id") is None):
+            try:
+                default_idx = None
+                try:
+                    d = sd.default.device
+                    if isinstance(d, (list, tuple)) and len(d) >= 2:
+                        default_idx = d[1]
+                except Exception:
+                    default_idx = None
+                mapper_name = None
+                mapper_id = None
+                samplerate = None
+                hostapi_name = None
+                if default_idx is not None:
+                    try:
+                        info = sd.query_devices(int(default_idx))
+                        mapper_name = info.get("name", "").strip()
+                        mapper_id = int(default_idx)
+                        samplerate = int(round(float(info.get("default_samplerate", 44100))))
+                        try:
+                            hostapi_name = sd.query_hostapis(info["hostapi"])["name"].strip()
+                        except Exception:
+                            hostapi_name = None
+                    except Exception:
+                        mapper_name = None
+                if not mapper_name:
+                    try:
+                        mapper_name, hostapi_name = AudioDeviceManager.get_default_output_device()
+                        mapper_id = None
+                    except Exception:
+                        mapper_name = mapper_name or "Default Output"
+                prefs.setdefault("last_audio_device", prefs.get("audio_device"))
+                prefs.setdefault("last_audio_device_id", prefs.get("audio_device_id"))
+                if mapper_name:
+                    prefs["mapper_name"] = mapper_name
+                if mapper_id is not None:
+                    prefs["mapper_id"] = mapper_id
+                if mapper_name and hostapi_name:
+                    prefs["audio_device"] = f"{mapper_name} — {hostapi_name}"
+                elif mapper_name:
+                    prefs["audio_device"] = mapper_name
+                else:
+                    prefs["audio_device"] = prefs.get("audio_device", None)
+                prefs["audio_device_id"] = mapper_id
+                prefs["samplerate"] = int(samplerate or prefs.get("samplerate") or 44100)
+                with open(prefs_path, "w", encoding="utf-8") as pf:
+                    json.dump(prefs, pf, indent=2)
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write(f"First-run: saved mapper/device -> name={prefs.get('mapper_name')} id={prefs.get('mapper_id')} audio_device={prefs.get('audio_device')} audio_device_id={prefs.get('audio_device_id')} samplerate={prefs.get('samplerate')}\n")
+                    lf.flush()
+            except Exception:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to auto-save mapper/device on first run:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+    except Exception:
+        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+            lf.write("Unexpected error while attempting to persist mapper/device on startup:\n")
+            traceback.print_exc(file=lf)
+            lf.flush()
     app = None
     try:
         app = BetterWMP()
