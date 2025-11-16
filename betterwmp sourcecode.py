@@ -478,6 +478,11 @@ class AudioEngine:
         if self._lock.acquire(timeout=1.0):
             try:
                 self.idx = int(t * self.sr)
+                if hasattr(self, 'on_seek'):
+                    try:
+                        self.on_seek(t)
+                    except Exception:
+                        pass
             except Exception as e:
                 print("Error seeking seconds:", e)
                 with open(FAULT_LOG, "a", encoding="utf-8") as lf:
@@ -646,17 +651,6 @@ class SettingsMenu(tk.Toplevel):
                     lf.write("Failed to read user preferences:\n")
                     traceback.print_exc(file=lf)
                     lf.flush()
-        def get_hostapi_list():
-            apis = []
-            try:
-                apis = [sd.query_hostapis(i)["name"] for i in range(len(sd.query_hostapis()))]
-            except Exception:
-                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                    lf.write("Failed to get host API list:\n")
-                    traceback.print_exc(file=lf)
-                    lf.flush()
-                apis = ["MME", "Windows DirectSound", "Windows WASAPI"]
-            return apis
         hostapis = self.get_hostapi_list()
         selected_driver = self.get_previous_driver(prefs_path, hostapis)
         if prev_device:
@@ -1233,7 +1227,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.audio: AudioEngine | None = None
         self.vis: Visualizer | None = None
         self._fft_cache = None
-        self._fft_cache_key = (None, None)
+        self._fft_cache_key = (None,)
         self.displayname = tk.StringVar(value="<No file>")
         self.buffer_var = tk.IntVar(value=4096)
         self.zp_var = tk.IntVar(value=1)
@@ -1243,6 +1237,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.drag_target_time = 0.0
         self._pending_seek = None
         self._pending_play = False
+        self._media_press_count = 0
         self._frame_times = []
         self._fps = 0.0
         self._stuckframe = 0
@@ -1601,15 +1596,17 @@ class BetterWMP(TkinterDnD.Tk):
                         lf.write("User requested reload. Offload.\n")
                         lf.flush()
         self.playlist_listbox.bind('<Double-Button-1>', lambda e: self._playlist_play_selected())
+        self.playlist_listbox.bind("<Up>", lambda e: self._handle_up_key() or "break")
+        self.playlist_listbox.bind("<Down>", lambda e: self._handle_down_key() or "break")
         self.bind_class("TButton", "<Return>", lambda e: "break")
         self.bind_class("TButton", "<space>", lambda e: "break")
         self.bind("<Control-o>", lambda e: self._playlist_append())
         self.bind("<space>", lambda e: self._toggle_play())
         self.bind("<Return>", lambda e: self._playlist_play_selected())
         self.bind("<Delete>", lambda e: self._playlist_remove())
-        self.bind("<Up>", lambda e: self._highlight_loaded())
-        self.bind("<Down>", lambda e: self._highlight_loaded())
         self.bind("<F5>", set_unplug_flag)
+        self.bind("<Left>", lambda e: self._press_left())
+        self.bind("<Right>", lambda e: self._press_right())
         keyboard.hook(self.on_key_event)
         if DEBUG:
             self.bind("<Control-Shift-Alt-c>", lambda e: self._simulate_crash())
@@ -1689,6 +1686,26 @@ class BetterWMP(TkinterDnD.Tk):
                 lf.write("Unexpected error in _reveal_in_explorer:\n")
                 traceback.print_exc(file=lf)
                 lf.flush()
+    def _press_left(self):
+        if self.audio is None:
+            return
+        if keyboard.is_pressed("shift") or keyboard.is_pressed("alt"):
+            current = self.audio.current_seconds()
+            self.audio.seek_seconds(max(0.0, current - 1.0))
+        else:
+            current = self.audio.current_seconds()
+            self.audio.seek_seconds(max(0.0, current - 5.0))
+        self._media_press_count = (self._media_press_count + 1) % 16
+    def _press_right(self):
+        if self.audio is None:
+            return
+        if keyboard.is_pressed("shift") or keyboard.is_pressed("alt"):
+            current = self.audio.current_seconds()
+            self.audio.seek_seconds(min(self.audio.duration_seconds(), current + 1.0))
+        else:
+            current = self.audio.current_seconds()
+            self.audio.seek_seconds(min(self.audio.duration_seconds(), current + 5.0))
+        self._media_press_count = (self._media_press_count + 1) % 16
     def on_key_event(self, e):
         global MEDIA_KEYS_ENABLED
         if MEDIA_KEYS_ENABLED and e.event_type == "down" and not self.triggered_pause:
@@ -2145,6 +2162,7 @@ class BetterWMP(TkinterDnD.Tk):
                 self.sr = sr
                 self.audio = AudioEngine(self.sr, device=device_pref)
                 self.audio.on_track_end = self._handle_track_end
+                self.audio.on_seek = lambda t: self._on_seek_callback(t)
                 try:
                     self.set_volume(getattr(self, "session_volume", 100))
                 except Exception:
@@ -2218,6 +2236,7 @@ class BetterWMP(TkinterDnD.Tk):
                         try:
                             self.audio = AudioEngine(sr, device=device_pref2)
                             self.audio.on_track_end = self._handle_track_end
+                            self.audio.on_seek = lambda t: self._on_seek_callback(t)
                             fallback_ok = True
                             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                                 lf.write(f"AudioEngine started with reverted device: {device_pref2}\n")
@@ -2247,6 +2266,7 @@ class BetterWMP(TkinterDnD.Tk):
                                         device_id = None
                                     self.audio = AudioEngine(sr, device=f"{default_device_name} — {default_device_driver}")
                                     self.audio.on_track_end = self._handle_track_end
+                                    self.audio.on_seek = lambda t: self._on_seek_callback(t)
                                     fallback_ok = True
                                     with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                                         lf.write(f"AudioEngine started with mapper device: {default_device_name} — {default_device_driver}\n")
@@ -2540,6 +2560,28 @@ class BetterWMP(TkinterDnD.Tk):
             self.playlist_listbox.selection_set(i+1)
             self.playlist_listbox.see(i+1)
         self._highlight_loaded()
+    def _handle_up_key(self):
+        if keyboard.is_pressed("shift") or keyboard.is_pressed("alt"):
+            self._playlist_up()
+        else:
+            idx = self.playlist_listbox.curselection()
+            if idx and idx[0] > 0:
+                new_idx = idx[0] - 1
+                self.playlist_listbox.selection_clear(0, tk.END)
+                self.playlist_listbox.selection_set(new_idx)
+                self.playlist_listbox.see(new_idx)
+            self._highlight_loaded()
+    def _handle_down_key(self):
+        if keyboard.is_pressed("shift") or keyboard.is_pressed("alt"):
+            self._playlist_down()
+        else:
+            idx = self.playlist_listbox.curselection()
+            if idx and idx[0] < len(self.playlist) - 1:
+                new_idx = idx[0] + 1
+                self.playlist_listbox.selection_clear(0, tk.END)
+                self.playlist_listbox.selection_set(new_idx)
+                self.playlist_listbox.see(new_idx)
+            self._highlight_loaded()
     def _playlist_play_selected(self):
         was_playing = self.audio.is_playing() if self.audio else False
         idx = self.playlist_listbox.curselection()
@@ -2706,6 +2748,15 @@ class BetterWMP(TkinterDnD.Tk):
                     self.audio.seek_seconds(0.0)
                 self._pending_play = True
         self._highlight_loaded()
+    def _on_seek_callback(self, t):
+        try:
+            self.display_time = t
+            self._draw_progress()
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Seek callback failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
     def _format_time(self, seconds: float) -> str:
         h = int(seconds // 3600)
         m = int((seconds % 3600) // 60)
@@ -2793,7 +2844,11 @@ class BetterWMP(TkinterDnD.Tk):
                 continue
             x = (np.log10(f) - np.log10(self.fmin)) / (np.log10(fmax) - np.log10(self.fmin)) * (w - 1)
             self.viz.create_line(x, 0, x, h, fill=SkinInfo["fft"]["line"], tags="grid")
+        for f in decades:
+            if f < self.fmin or f > fmax:
+                continue
             if str(f)[0] in '124':
+                x = (np.log10(f) - np.log10(self.fmin)) / (np.log10(fmax) - np.log10(self.fmin)) * (w - 1)
                 if f >= 1000:
                     if f < 15000:
                         self.viz.create_text(x + 2, 12, anchor='nw', fill=SkinInfo["fft"]["text"], text=f"{f // 1000} kHz", tags="grid")
@@ -2817,7 +2872,7 @@ class BetterWMP(TkinterDnD.Tk):
             current_time = t0
             if DEBUG:
                 self._frame_times.append(current_time)
-                if len(self._frame_times) > 30:
+                if len(self._frame_times) > 5:
                     self._frame_times.pop(0)
                 if len(self._frame_times) >= 2:
                     time_span = self._frame_times[-1] - self._frame_times[0]
@@ -2912,16 +2967,14 @@ class BetterWMP(TkinterDnD.Tk):
                     if self.vis is not None and self.audio is not None and not self._is_minimized():
                         current_key = (
                             getattr(self, "current_wav", None), 
+                            self.audio.idx,
                             float(self.display_time), 
                             self.buffer_var.get(), 
                             self.zp_var.get(), 
-                            self.audio.device
+                            self.audio.device,
+                            self._media_press_count,
                         )
-                        if self._fft_cache_key == current_key and self._fft_cache is not None:
-                            # if runframes % 10 == 0:print("use cached fft")
-                            # freqs, mid_db, side_db = self._fft_cache
-                            pass
-                        else:
+                        if not (self._fft_cache_key == current_key and self._fft_cache is not None):
                             buffer_n = int(self.buffer_var.get())
                             zp = int(self.zp_var.get())
                             mids = self.vis.list_for_fft(self.display_time, 'm', buffer_n)
@@ -3111,11 +3164,11 @@ def main():
                 if default_idx is not None:
                     try:
                         info = sd.query_devices(int(default_idx))
-                        mapper_name = info.get("name", "").strip()
+                        mapper_name = str(info.get("name", "")).strip()
                         mapper_id = int(default_idx)
                         samplerate = int(round(float(info.get("default_samplerate", 44100))))
                         try:
-                            hostapi_name = sd.query_hostapis(info["hostapi"])["name"].strip()
+                            hostapi_name = str(sd.query_hostapis(info["hostapi"])["name"]).strip()
                         except Exception:
                             hostapi_name = None
                     except Exception:
