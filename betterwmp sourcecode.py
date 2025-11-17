@@ -12,6 +12,7 @@ import threading
 import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+import tkinter.font as tkfont
 import numpy as np
 import scipy
 from io import BytesIO
@@ -21,7 +22,12 @@ from playsound import playsound
 import sounddevice as sd 
 from tkinterdnd2 import TkinterDnD, DND_FILES
 import faulthandler
+import timeit
 
+test = timeit.default_timer
+
+user32 = ctypes.windll.user32
+user32.SetProcessDPIAware()
 callbackFlag = False
 FAULT_LOG = os.path.expandvars(r"%localappdata%\betterwmpconf\fault.log")
 CONF_DIR = os.path.expandvars(r"%localappdata%\betterwmpconf")
@@ -93,7 +99,7 @@ def _candidate_ffmpeg_paths():
     path_ffmpeg = shutil.which("ffmpeg")
     if path_ffmpeg:
         yield path_ffmpeg
-def resolve_ffmpeg() -> str | None:
+def resolve_ffmpeg():
     for cand in _candidate_ffmpeg_paths():
         if cand and os.path.isfile(cand):
             return cand
@@ -592,8 +598,8 @@ class SettingsMenu(tk.Toplevel):
                 foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
                 relief=tk.SOLID,
                 borderwidth=1,
-                wraplength=300,
-                font=("Segoe UI", 8)
+                wraplength=400,
+                font=("Consolas", 8)
             )
             label.pack()
             self.tooltip_window.update_idletasks()
@@ -607,7 +613,8 @@ class SettingsMenu(tk.Toplevel):
     def __init__(self, parent):
         global MEDIA_KEYS_ENABLED, SAMPLERATE_PREF
         super().__init__(parent)
-        window_dimensions = (350, 520)
+        window_dimensions = (538, 640)
+        menu_font = ("Consolas", 9)
         self.title("BetterWMP Settings")
         self.geometry(f"{window_dimensions[0]}x{window_dimensions[1]}")
         parent_x = parent.winfo_rootx()
@@ -626,8 +633,8 @@ class SettingsMenu(tk.Toplevel):
             self, text="BetterWMP Settings",
             fg=SkinInfo["tkinter"].get("label", "#ffffff"),
             bg=SkinInfo["tkinter"].get("bg", "#333333"),
-            font=("Segoe UI", 12, "bold")
-        ).pack(fill="x", padx=(10, 5), pady=(10, 10))
+            font=("Consolas", 12, "bold")
+        ).pack(fill="x", padx=(10, 5), pady=(20, 20))
         conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
         os.makedirs(conf_dir, exist_ok=True)
         prefs_path = os.path.join(conf_dir, "userprefs.conf")
@@ -687,14 +694,14 @@ class SettingsMenu(tk.Toplevel):
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#685868"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
             relief="flat", highlightthickness=0, indicatoron=0,
-            borderwidth=0, bd=0
+            borderwidth=0, bd=0, font=menu_font
         )
         self.driver_menu["menu"].config(
             bg=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
             fg=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#685868"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
-            relief="flat",
+            relief="flat", font=menu_font, 
             borderwidth=0
         )
         self.driver_menu.pack(fill="x", padx=(10, 10), pady=(0, 8))
@@ -733,14 +740,14 @@ class SettingsMenu(tk.Toplevel):
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#685868"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
             relief="flat", highlightthickness=0, indicatoron=0, 
-            borderwidth=0, bd=0
+            borderwidth=0, bd=0, font=menu_font
         )
         self.device_menu["menu"].config(
             bg=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
             fg=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#685868"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"),
-            relief="flat",
+            relief="flat", font=menu_font,
             borderwidth=0
         )
         self.device_menu.pack(fill="x", padx=(10, 10), pady=(0, 8))
@@ -1005,7 +1012,7 @@ class SettingsMenu(tk.Toplevel):
         media_keys_btn.pack(fill="x", padx=(10, 10), pady=(5, 20))
         ttk.Button(
             self, text="Close", command=self.destroy, style="Flat.TButton", takefocus=False
-        ).pack(fill="x", padx=(10, 10), pady=(10, 5))
+        ).pack(fill="x", padx=(10, 10), pady=(20, 5))
         self.bind("<Escape>", lambda e: self.destroy())
     def hide_tooltip(self):
         if self.tooltip_window:
@@ -1127,6 +1134,99 @@ class SettingsMenu(tk.Toplevel):
             selected_driver = hostapis[0] if hostapis else ""
         return selected_driver
 
+class Snapshot:
+    def __init__(self, left, right, sr):
+        self.left = np.asarray(left, dtype=np.float32)
+        self.right = np.asarray(right, dtype=np.float32)
+        self.mid = (self.left + self.right) * 0.5
+        self.sr = int(sr)
+    def lowpass_filter(self, x, cutoff = 300.0, order = 3):
+        try:
+            butter = scipy.signal.butter
+            lfilter = scipy.signal.lfilter
+            nyq = self.sr * 0.5
+            norm_cutoff = cutoff / nyq
+            b, a = butter(order, norm_cutoff, btype='low')
+            return lfilter(b, a, x)
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Lowpass filter error:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            return x
+    def estimate_dominant_freq_autocorr(self, x):
+        try:
+            x = x.astype(np.float32)
+            x = x - np.mean(x)
+            if len(x) < 2:
+                return 0.0, 0.0
+            r0 = np.dot(x, x)
+            if r0 <= 1e-12:
+                return 0.0, 0.0
+            r1 = np.dot(x[:-1], x[1:])
+            rho = np.clip(r1 / r0, -1.0, 1.0)
+            omega = np.arccos(rho)
+            f0 = (omega * self.sr) / (2.0 * np.pi)
+            significance = abs(rho)
+            return f0, significance
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Autocorrelation error:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            return None, None
+    def get_rephased_segment(self, t_start, display_duration=0.05, analysis_duration=0.20):
+        try:
+            x = self.mid
+            start_sample = int(t_start * self.sr)
+            N_analysis = int(analysis_duration * self.sr)
+            N_display = int(display_duration * self.sr)
+            if start_sample < 0:
+                pad_length = abs(start_sample)
+                start_sample = 0
+                if start_sample + N_analysis >= len(x):
+                    return None, None, 0.0
+                analysis_seg_raw = x[start_sample:start_sample + N_analysis]
+                analysis_seg_raw = np.pad(analysis_seg_raw, (pad_length, 0), mode='constant', constant_values=0)
+            elif start_sample + N_analysis >= len(x):
+                available = len(x) - start_sample
+                if available <= 0:
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write(f"Snapshot: requested segment goes past end of file (t_start={t_start})\n")
+                        lf.flush()
+                    return None, None, 0.0
+                analysis_seg_raw = x[start_sample:]
+                pad_length = N_analysis - available
+                analysis_seg_raw = np.pad(analysis_seg_raw, (0, pad_length), mode='constant', constant_values=0)
+            else:
+                analysis_seg_raw = x[start_sample:start_sample + N_analysis]
+            analysis_seg_filtered = self.lowpass_filter(analysis_seg_raw)
+            f0, significance = self.estimate_dominant_freq_autocorr(analysis_seg_filtered)
+            if f0 is None or f0 < 20 or f0 > 500 or significance < 0.1:
+                offset = 0
+            else:
+                seg_filtered = analysis_seg_filtered[:N_display]
+                signs = np.sign(seg_filtered)
+                crossings = np.where((signs[:-1] <= 0) & (signs[1:] > 0))[0]
+                if len(crossings) > 0:
+                    offset = crossings[0]
+                else:
+                    offset = int(np.argmax(seg_filtered))
+            if offset + N_display > len(analysis_seg_raw):
+                display = analysis_seg_raw[offset:]
+                pad_length = N_display - len(display)
+                display = np.pad(display, (0, pad_length), mode='constant', constant_values=0)
+            else:
+                display = analysis_seg_raw[offset:offset + N_display]
+            t = np.arange(display.shape[0]) / self.sr
+            return t, display, f0
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Get rephased segment error:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            return None, None, 0.0
+
 class Visualizer:
     def __init__(self, left, right, sr):
         self.left = np.asarray(left, dtype=np.float32)
@@ -1193,13 +1293,21 @@ class BetterWMP(TkinterDnD.Tk):
     def __init__(self):
         global DEBUG, MEDIA_KEYS_ENABLED, SkinInfo
         super().__init__()
+        _family = "Consolas"
+        _size = 10
+        default_font = tkfont.nametofont("TkDefaultFont")
+        default_font.configure(family=_family, size=_size)
+        text_font = tkfont.nametofont("TkTextFont")
+        text_font.configure(family=_family, size=_size)
+        fixed_font = tkfont.nametofont("TkFixedFont")
+        fixed_font.configure(family=_family)
         self.configure(bg=SkinInfo["tkinter"]["bg"])
         icon_bytes = base64.b64decode(ICON.split(",")[1])
         image = Image.open(BytesIO(icon_bytes))
         photo = ImageTk.PhotoImage(image)
         self.iconphoto(True, photo)
-        self.geometry("750x600")
-        self.minsize(750, 500)
+        self.geometry("940x780")
+        self.minsize(800, 720)
         self.playlist = []
         self.playlist_listbox = None
         self.time_last_frame = None
@@ -1226,6 +1334,7 @@ class BetterWMP(TkinterDnD.Tk):
             foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"))
         self.audio: AudioEngine | None = None
         self.vis: Visualizer | None = None
+        self.snap: Snapshot | None = None
         self._fft_cache = None
         self._fft_cache_key = (None,)
         self.displayname = tk.StringVar(value="<No file>")
@@ -1247,6 +1356,8 @@ class BetterWMP(TkinterDnD.Tk):
         self.triggered_pause = False
         self.drop_target_register(DND_FILES)
         self.dnd_bind('<<Drop>>', self._on_file_drop)
+        self.bind("<Configure>", self._on_config)
+        self._in_drag = False
         self.fmin = 10.0
         self.db_min, self.db_max = -80.0, 0.0
         self.bg = SkinInfo["fft"]["bg"]
@@ -1254,6 +1365,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.mid_color = SkinInfo["fft"]["mid"]
         self.side_color = SkinInfo["fft"]["side"]
         self._build_ui()
+        self._force_pump()
         self._last_frame_time = time.perf_counter()
         try:
             conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
@@ -1278,6 +1390,20 @@ class BetterWMP(TkinterDnD.Tk):
             frame_delay = 16
         self.after(frame_delay, self._update_loop)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+    def _on_config(self, event):
+        self._in_drag = True
+        if hasattr(self, "_drag_after"):
+            self.after_cancel(self._drag_after)
+        def end_drag():
+            self._in_drag = False
+        self._drag_after = self.after(120, end_drag)
+    def _force_pump(self):
+        if not self._in_drag:
+            msg = ctypes.wintypes.MSG()
+            while ctypes.windll.user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, 1):
+                ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
+                ctypes.windll.user32.DispatchMessageW(ctypes.byref(msg))
+            self.after(8, self._force_pump)
     def _is_minimized(self) -> bool:
         try:
             return (self.state() == 'iconic') or (not self.winfo_viewable())
@@ -1290,8 +1416,23 @@ class BetterWMP(TkinterDnD.Tk):
     def _build_ui(self):
         global DEBUG
         tk_colors = SkinInfo.get("tkinter", {})
-        top = tk.Frame(self, bg=tk_colors.get("bg", "#1a1a1a"))
-        top.pack(side=tk.TOP, fill=tk.X, padx=5, pady=8)
+        menu_font = ("Consolas", 9)
+        control_container = tk.Frame(self, bg=tk_colors.get("bg", "#1a1a1a"))
+        control_container.pack(side=tk.TOP, fill=tk.X, padx=5, pady=8)
+        play_frame = tk.Frame(control_container, bg=tk_colors.get("bg", "#1a1a1a"))
+        play_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(1, 10))
+        right_container = tk.Frame(control_container, bg=tk_colors.get("bg", "#1a1a1a"))
+        right_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.snapshot_frame = tk.Canvas(
+            control_container, 
+            bg=SkinInfo["fft"]["bg"],
+            highlightthickness=0, borderwidth=0, width=200, height=85
+        )
+        self.snapshot_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(30, 4))
+        top = tk.Frame(right_container, bg=tk_colors.get("bg", "#1a1a1a"))
+        top.pack(side=tk.TOP, fill=tk.X, padx=0, pady=(5, 8))
+        top2 = tk.Frame(right_container, bg=tk_colors.get("bg", "#1a1a1a"))
+        top2.pack(side=tk.TOP, fill=tk.X, padx=0, pady=(0, 0))
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("Flat.TButton",
@@ -1312,14 +1453,14 @@ class BetterWMP(TkinterDnD.Tk):
             ]
         )
         self.play_btn = ttk.Button(
-            top, text="▶", command=self._toggle_play, takefocus=0, width=5, style="Flat.TButton"
+            play_frame, text="▶", command=self._toggle_play, takefocus=0, width=7, style="Flat.TButton"
         )
-        self.play_btn.pack(side=tk.LEFT, padx=(5, 0))
+        self.play_btn.pack(fill=tk.BOTH, expand=True, padx=(5, 0))
         self.play_btn.state(["disabled"])
         self.title(f"BetterWMP: {self.displayname.get()}")
         self.buffer_var = tk.IntVar(value=4096)
         self.buffer_label = tk.StringVar(value=f"{self.buffer_var.get()}  ▾")
-        tk.Label(top, text="Buffer", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(10, 2))
+        tk.Label(top, text="Buffer", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(5, 5))
         buf_menu = tk.OptionMenu(top, self.buffer_label, "")
         buf_menu.config(
             indicatoron=0, 
@@ -1327,13 +1468,13 @@ class BetterWMP(TkinterDnD.Tk):
             fg=tk_colors.get("dropdownfg", "#ffffff"),
             activebackground=tk_colors.get("dropdownactivebg", "#685868"),
             activeforeground=tk_colors.get("dropdownactivefg", "#ffffff"),
-            relief="flat", borderwidth=0, highlightthickness=0
+            relief="flat", borderwidth=0, highlightthickness=0, font=menu_font
         )
         buf_menu["menu"].config(
             bg=tk_colors.get("dropdownbg", "#555555"),
             fg=tk_colors.get("dropdownfg", "#ffffff"),
             activebackground=tk_colors.get("dropdownactivebg", "#685868"),
-            activeforeground=tk_colors.get("dropdownactivefg", "#ffffff")
+            activeforeground=tk_colors.get("dropdownactivefg", "#ffffff"), font=menu_font
         )
         buf_menu.pack(side=tk.LEFT)
         buf_menu["menu"].delete(0, "end")
@@ -1344,7 +1485,7 @@ class BetterWMP(TkinterDnD.Tk):
                 value=opt,
                 command=lambda v=opt: self.set_buffer(v)
             )
-        tk.Label(top, text="Zero-pad", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(10, 2))
+        tk.Label(top, text="Zero-pad", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(38, 5))
         self.zp_label = tk.StringVar(value=f"{self.zp_var.get()}  ▾")
         self.zp_menu = tk.OptionMenu(top, self.zp_label, "")
         self.zp_menu.config(
@@ -1353,13 +1494,13 @@ class BetterWMP(TkinterDnD.Tk):
             fg=tk_colors.get("dropdownfg", "#ffffff"),
             activebackground=tk_colors.get("dropdownactivebg", "#685868"),
             activeforeground=tk_colors.get("dropdownactivefg", "#ffffff"),
-            relief="flat", borderwidth=0, highlightthickness=0
+            relief="flat", borderwidth=0, highlightthickness=0, font=menu_font
         )
         self.zp_menu["menu"].config(
             bg=tk_colors.get("dropdownbg", "#555555"),
             fg=tk_colors.get("dropdownfg", "#ffffff"),
             activebackground=tk_colors.get("dropdownactivebg", "#685868"),
-            activeforeground=tk_colors.get("dropdownactivefg", "#ffffff")
+            activeforeground=tk_colors.get("dropdownactivefg", "#ffffff"), font=menu_font
         )
         self.zp_menu.pack(side=tk.LEFT)
         self.zp_menu["menu"].delete(0, "end")
@@ -1370,25 +1511,25 @@ class BetterWMP(TkinterDnD.Tk):
             value=opt,
             command=lambda v=opt: self.set_zp(v)
             )
-        tk.Label(top, text="Repeat", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(10, 5))
+        tk.Label(top2, text="Repeat", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(5, 5))
         self.repeat_label = tk.StringVar(value=f"{'track once'}  ▾")
         repeat_options = ["track once", "playlist once", "track repeat", "playlist repeat"]
-        repeat_menu = tk.OptionMenu(top, self.repeat_label, "")
+        repeat_menu = tk.OptionMenu(top2, self.repeat_label, "")
         repeat_menu.config(
             indicatoron=0, 
             bg=tk_colors.get("dropdownbg", "#555555"),
             fg=tk_colors.get("dropdownfg", "#ffffff"),
             activebackground=tk_colors.get("dropdownactivebg", "#685868"),
             activeforeground=tk_colors.get("dropdownactivefg", "#ffffff"),
-            relief="flat", borderwidth=0, highlightthickness=0
+            relief="flat", borderwidth=0, highlightthickness=0, font=menu_font
         )
         repeat_menu["menu"].config(
             bg=tk_colors.get("dropdownbg", "#555555"),
             fg=tk_colors.get("dropdownfg", "#ffffff"),
             activebackground=tk_colors.get("dropdownactivebg", "#685868"),
-            activeforeground=tk_colors.get("dropdownactivefg", "#ffffff")
+            activeforeground=tk_colors.get("dropdownactivefg", "#ffffff"), font=menu_font
         )
-        repeat_menu.pack(side=tk.LEFT)
+        repeat_menu.pack(side=tk.LEFT, padx=(0, 20))
         self.repeat_mode = tk.StringVar(value="track once")
         repeat_menu["menu"].delete(0, "end")
         for opt in repeat_options:
@@ -1398,33 +1539,34 @@ class BetterWMP(TkinterDnD.Tk):
             value=opt,
             command=lambda v=opt: self._on_repeat_mode_change(v)
             )
+        style = ttk.Style()
         self.prev_btn = ttk.Button(
-            top, text="←", command=self._playlist_prev,
-            takefocus=0, width=3, style="Flat.TButton"
+            top2, text="←", command=self._playlist_prev,
+            takefocus=0, width=3, style="Flat.TButton", padding=(2, 6)
         )
         self.prev_btn.pack(side=tk.LEFT, padx=(10, 0))
         self.next_btn = ttk.Button(
-            top, text="→", command=self._playlist_next,
-            takefocus=0, width=3, style="Flat.TButton"
+            top2, text="→", command=self._playlist_next,
+            takefocus=0, width=3, style="Flat.TButton", padding=(2, 6)
         )
         self.next_btn.pack(side=tk.LEFT, padx=(2, 0))
         self.restart_btn = ttk.Button(
-            top, text="\u21BA", command=self._playlist_restart,
-            takefocus=0, width=3, style="Flat.TButton"
+            top2, text="\u21BA", command=self._playlist_restart,
+            takefocus=0, width=3, style="Flat.TButton", padding=(2, 6)
         )
         self.restart_btn.pack(side=tk.LEFT, padx=(2, 0))
         self.skin_btn = ttk.Button(
-            top, text="🔧", command=self._open_settings_menu,
-            takefocus=0, width=3, style="Flat.TButton"
+            top2, text="🔧", command=self._open_settings_menu,
+            takefocus=0, width=3, style="Flat.TButton", padding=(2, 6)
         )
         self.skin_btn.pack(side=tk.LEFT, padx=(2, 0))
         self.timestamp_label = tk.Label(top, text="", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a"))
-        self.timestamp_label.pack(side=tk.LEFT, padx=(10, 0))
+        self.timestamp_label.pack(side=tk.LEFT, padx=(43+7, 0))
         if DEBUG:
-            self.fps_label = tk.Label(top, text="", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a"))
-            self.fps_label.pack(side=tk.LEFT, padx=(5, 0))
+            self.fps_label = tk.Label(top2, text="", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a"))
+            self.fps_label.pack(side=tk.LEFT, padx=(15+7, 0))
         self._update_nav_buttons()
-        self.prog = tk.Canvas(self, height=24, background=SkinInfo["prog"]["bg"], highlightthickness=0)
+        self.prog = tk.Canvas(self, height=32, background=SkinInfo["prog"]["bg"], highlightthickness=0)
         self.prog.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(4, 8))
         self.prog.bind("<Button-1>", self._on_prog_press)
         self.prog.bind("<B1-Motion>", self._on_prog_motion)
@@ -1437,7 +1579,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.playlist_listbox = tk.Listbox(playlist_section, yscrollcommand=scrollbar.set,
             bg=tk_colors.get("listboxbg", "#000000"), fg=tk_colors.get("listboxfg", "#ffffff"),
             selectbackground=tk_colors.get("listboxselbg", "#402e50"), selectforeground=tk_colors.get("listboxselfg", "#ffffff"),
-            height = 13)
+            height = 12)
         scrollbar.config(command=self.playlist_listbox.yview)
         self.playlist_listbox.configure(activestyle="none")
         btns = [
@@ -1463,7 +1605,7 @@ class BetterWMP(TkinterDnD.Tk):
                 style="Flat.TButton"
             )
             b.pack(side=tk.TOP, fill=tk.X, pady=1)
-        self.playlist_context_menu = tk.Menu(self, tearoff=0)
+        self.playlist_context_menu = tk.Menu(self, tearoff=0, font=menu_font)
         # self.playlist_context_menu.add_command(label="Save Playlist", command=self._save_playlist)
         # self.playlist_context_menu.add_command(label="Load Playlist", command=self._load_playlist)
         tk_colors = SkinInfo.get("tkinter", {})
@@ -1512,7 +1654,7 @@ class BetterWMP(TkinterDnD.Tk):
                         activebackground=tk_colors.get("dropdownactivebg", "#685868"),
                         activeforeground=tk_colors.get("dropdownactivefg", "#ffffff"),
                         relief = "flat",
-                        bd = 0
+                        bd = 0, font=menu_font
                     )
                 except Exception:
                     with open(FAULT_LOG, "a", encoding="utf-8") as lf:
@@ -1627,7 +1769,22 @@ class BetterWMP(TkinterDnD.Tk):
             highlightthickness=0, borderwidth=0, relief="flat",
             foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#685868"),
-            activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff"))
+            activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff")
+        )
+    def _get_window_size(self):
+        if self._is_minimized():
+            return 0, 0
+        try:
+            self.update_idletasks()
+            width = self.viz.winfo_width()
+            height = self.viz.winfo_height()
+            return width, height
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Failed to get window size:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            return 0, 0
     def _context_copy_file(self):
         try:
             idx = None
@@ -1952,7 +2109,7 @@ class BetterWMP(TkinterDnD.Tk):
         self._highlight_loaded()
     def set_buffer(self, val):
         self.buffer_var.set(val)
-        self.buffer_label.set(f"{val}  ▾")
+        self.buffer_label.set(f"{str(val) + ' ' * (5 - len(str(val)))} ▾")
         self._update_zeropad_options()
     def set_zp(self, val):
         self.zp_var.set(val)
@@ -2294,6 +2451,7 @@ class BetterWMP(TkinterDnD.Tk):
                     return
         self.audio.load_track(sr, left, right)
         self.vis = Visualizer(left, right, sr)
+        self.snap = Snapshot(left, right, sr)
         self.displayname.set(os.path.basename(entry['orig']))
         self.title(f"BetterWMP: {self.displayname.get()}")
         self.play_btn.configure(text="▶", state="normal")
@@ -2449,6 +2607,8 @@ class BetterWMP(TkinterDnD.Tk):
             self.displayname.set("<No file>")
             self.viz.delete("all")
             self.vis = None
+            self.snap = None
+            self.snapshot_frame.delete("all") 
             self.play_btn.configure(text="▶", state="disabled")
             self.title("BetterWMP: <No file>")
             self._update_nav_buttons()
@@ -2650,11 +2810,14 @@ class BetterWMP(TkinterDnD.Tk):
                 self.displayname.set("<No file>")
                 self.title("BetterWMP: <No file>")
                 self.vis = None
+                self.snap = None
                 self.viz.delete("all")
+                self.snapshot_frame.delete("all") 
+                self.snap.delete()
                 self.current_wav = None
                 self._highlight_loaded()
                 self._fft_cache = None
-                self._fft_cache_key = (None, None)
+                self._fft_cache_key = (None,)
             if self.unplug_backup:
                 time.sleep(0.016)
                 idx = self.unplug_backup.get('loaded', None)
@@ -2687,7 +2850,9 @@ class BetterWMP(TkinterDnD.Tk):
         self.timestamp_label.config(text="")
         self.displayname.set("<No file>")
         self.vis = None
+        self.snap = None
         self.viz.delete("all")
+        self.snapshot_frame.delete("all") 
         self.play_btn.configure(state="disabled")
         self.title("BetterWMP: <No file>")
         self._highlight_loaded()
@@ -2865,6 +3030,71 @@ class BetterWMP(TkinterDnD.Tk):
             self.viz.create_line(*sum(side_pts, ()), fill=self.side_color, width=1, tags="spec")
         if len(mid_pts) > 1:
             self.viz.create_line(*sum(mid_pts, ()), fill=self.mid_color, width=1, tags="spec")
+    def _draw_snapshot(self):
+        global DEBUG
+        if self.audio is None or self.snap is None:
+            self.snapshot_frame.delete("all")
+            return
+        try:
+            w = max(10, int(self.snapshot_frame.winfo_width()))
+            h = max(10, int(self.snapshot_frame.winfo_height()))
+            current_key = (w, h, round(self.display_time, 2))
+            if hasattr(self, '_snapshot_cache_key') and self._snapshot_cache_key == current_key:
+                return
+            self.snapshot_frame.delete("all")
+            t, amplitude, f0 = self.snap.get_rephased_segment(
+                self.display_time - 0.075,
+                display_duration=0.05,
+                analysis_duration=0.20
+            )
+            if t is None or amplitude is None or len(amplitude) == 0:
+                return
+            max_points = min(200, w)
+            if len(amplitude) > max_points:
+                step = len(amplitude) // max_points
+                amplitude = amplitude[::step]
+            w_minus_1 = w - 1
+            h_minus_1 = h - 1
+            len_amp = len(amplitude)
+            amp_center = 0.0
+            amp_scale = 1.0
+            y_scale = (h_minus_1 / 2.0) / amp_scale
+            y_center = h_minus_1 / 2.0
+            points = [
+                (
+                    (i / (len_amp - 1)) * w_minus_1,
+                    y_center - (amp * y_scale)
+                )
+                for i, amp in enumerate(amplitude)
+            ]
+            y_center = h * 0.5
+            self.snapshot_frame.create_line(
+                0, y_center, w, y_center,
+                fill=SkinInfo["fft"]["line"],
+                width=2
+            )
+            if len(points) > 1:
+                flat_points = [coord for point in points for coord in point]
+                self.snapshot_frame.create_line(
+                    flat_points,
+                    fill=self.mid_color,
+                    width=1,
+                    smooth=False
+                )
+            if f0 and f0 > 20:
+                self.snapshot_frame.create_text(
+                    w - 5, 5,
+                    anchor='ne',
+                    fill=SkinInfo["fft"]["text"],
+                    text=f"{f0:.0f} Hz" if DEBUG else "",
+                    font=("Consolas", 8)
+                )
+            self._snapshot_cache_key = current_key
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Exception in snapshot drawing:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
     def _update_loop(self):
         global runframes, EmergencyStop, unplug_flag, DEBUG, callbackFlag
         t0 = time.perf_counter()
@@ -2973,6 +3203,7 @@ class BetterWMP(TkinterDnD.Tk):
                             self.zp_var.get(), 
                             self.audio.device,
                             self._media_press_count,
+                            self._get_window_size(),
                         )
                         if not (self._fft_cache_key == current_key and self._fft_cache is not None):
                             buffer_n = int(self.buffer_var.get())
@@ -2989,6 +3220,8 @@ class BetterWMP(TkinterDnD.Tk):
                             self._fft_cache_key = current_key
                             self._draw_axes()
                             self._draw_spectrum(freqs, mid_db, side_db)
+                            if self.snap is not None:
+                                self._draw_snapshot()
                 except Exception:
                     with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                         lf.write("Exception in spectrum drawing:\n")

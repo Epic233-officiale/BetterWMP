@@ -2,7 +2,7 @@
 
 Features:
 - Supports most audio filetypes and codecs and opens them with low latency
-- Realtime FFT spectrum visualization
+- Realtime waveform and FFT spectrum visualization
 - Full Playback & Playlist features
 - Skin customization through JSON editing
 - Drag and drop to append new files
@@ -10,4 +10,4 @@ Features:
 
 ---
 ### Download
-[Download Installer](https://github.com/Epic233-officiale/BetterWMP/releases/tag/v1.4.4)
+[Download Installer](https://github.com/Epic233-officiale/BetterWMP/releases/tag/v1.5.0)
