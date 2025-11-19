@@ -23,9 +23,11 @@ import sounddevice as sd
 from tkinterdnd2 import TkinterDnD, DND_FILES
 import faulthandler
 import timeit
+import pyloudnorm as pyln
+import mutagen
+import pynput
 
-test = timeit.default_timer
-
+_test = timeit.default_timer
 user32 = ctypes.windll.user32
 user32.SetProcessDPIAware()
 callbackFlag = False
@@ -451,8 +453,8 @@ class AudioEngine:
             return
         end = idx + frames
         if end <= n:
-            outdata[:, 0] = left[idx:end] * volume**2
-            outdata[:, 1] = right[idx:end] * volume**2
+            outdata[:, 0] = left[idx:end] * volume**1.66
+            outdata[:, 1] = right[idx:end] * volume**1.66
             self.idx = end
         else:
             remain = n - idx
@@ -622,7 +624,7 @@ class SettingsMenu(tk.Toplevel):
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
         new_x = max(0, min(parent_x + 50, screen_width - window_dimensions[0]))
-        new_y = max(0, min(parent_y + 50, screen_height - window_dimensions[1] - 85))
+        new_y = max(0, min(parent_y + 50, screen_height - window_dimensions[1] - 135))
         self.geometry(f"+{new_x}+{new_y}")
         self.resizable(False, False)
         self.configure(bg=SkinInfo["tkinter"].get("bg", "#333333"))
@@ -1083,7 +1085,8 @@ class SettingsMenu(tk.Toplevel):
     def get_hostapi_list(self):
         apis = []
         try:
-            apis = [sd.query_hostapis(i)["name"] for i in range(len(sd.query_hostapis()))]
+            count = sd.query_hostapis()["hostapi_count"]
+            apis = [sd.query_hostapis(i)["name"] for i in range(count)]
         except Exception:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write("Failed to get host API list:\n")
@@ -1133,6 +1136,71 @@ class SettingsMenu(tk.Toplevel):
         if selected_driver is None:
             selected_driver = hostapis[0] if hostapis else ""
         return selected_driver
+
+class Lufs():
+    def __init__(self, left, right, sr):
+        self.left = np.asarray(left, dtype=np.float32)
+        self.right = np.asarray(right, dtype=np.float32)
+        self.sr = int(sr)
+        self.meter = pyln.Meter(self.sr)
+    def calculate_inst_lufs(self, signal):
+        loudness = self.meter.integrated_loudness(signal)
+        return loudness
+    def calculate_lufs_at_time(self, timestamp, window_duration = 0.4):
+        try:
+            if timestamp <= 0:
+                return None
+            min_window = max(0.4, window_duration)
+            center_sample = int(timestamp * self.sr)
+            window_samples = int(min_window * self.sr)
+            half_window = window_samples // 2
+            start_sample = max(center_sample - half_window, 0)
+            end_sample = min(center_sample + half_window, len(self.left))
+            left_segment = self.left[start_sample:end_sample]
+            right_segment = self.right[start_sample:end_sample]
+            min_samples = int(0.4 * self.sr)
+            if len(left_segment) < min_samples or len(right_segment) < min_samples:
+                if len(left_segment) < min_samples:
+                    pad_needed = min_samples - len(left_segment)
+                    left_segment = np.pad(left_segment, (0, pad_needed), mode='constant')
+                    right_segment = np.pad(right_segment, (0, pad_needed), mode='constant')
+            if len(left_segment) == 0 or len(right_segment) == 0:
+                return None
+            stereo_signal = np.vstack((left_segment, right_segment)).T
+            loudness = self.calculate_inst_lufs(stereo_signal)
+            return loudness
+        except Exception as e:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("LUFS calculation error:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            return None
+
+class Stereo:
+    def __init__(self, left, right, sr):
+        self.left = np.asarray(left, dtype=np.float32)
+        self.right = np.asarray(right, dtype=np.float32)
+        self.sr = int(sr)
+    def scope(self, timestamp, duration):
+        timestamp_sample = int(timestamp * self.sr)
+        if timestamp_sample <= 0:
+            return np.array([0]), np.array([0])
+        duration_samples = int(duration * self.sr)
+        start_sample = max(timestamp_sample - duration_samples, 0)
+        end_sample = min(timestamp_sample, len(self.left))
+        left_segment = self.left[start_sample:end_sample]
+        right_segment = self.right[start_sample:end_sample]
+        scaling_factor = np.sqrt(2) / 2
+        left_scaled = left_segment * scaling_factor
+        right_scaled = right_segment * scaling_factor
+        orig_y = left_scaled
+        orig_x = right_scaled
+        rotation_matrix = np.array([[np.sqrt(2) / 2, -np.sqrt(2) / 2],
+                                    [np.sqrt(2) / 2, np.sqrt(2) / 2]])
+        rotated_coords = np.dot(rotation_matrix, np.vstack((orig_x, orig_y)))
+        x = rotated_coords[0]
+        y = rotated_coords[1]
+        return x, y
 
 class Snapshot:
     def __init__(self, left, right, sr):
@@ -1289,6 +1357,71 @@ class Visualizer:
                 points.append((x, int(y)))
         return points
 
+class MetadataTag:
+    def __init__(self, widget, metadata):
+        print("MetadataTag initialized")
+        self.widget = widget
+        self.metadata = metadata
+        self.tooltip_window = None
+        self.mouse_listener = None
+        self.widget.bind("<ButtonRelease-3>", self.on_right_click)
+    def on_right_click(self, event=None):
+        print("Right click detected")
+        self.show_tooltip()
+    def on_click(self, x, y, button, pressed):
+        print(f"Global click: pressed={pressed}, has_tooltip={self.tooltip_window is not None}")
+        if not pressed or not self.tooltip_window:
+            return
+        try:
+            self.widget.after(0, self.hide_tooltip)
+        except Exception as e:
+            print(f"Error in on_click: {e}")
+    def show_tooltip(self):
+        print("show_tooltip called")
+        if self.tooltip_window:
+            print("Tooltip already exists, returning")
+            return
+        text = self.format_metadata()
+        x = self.widget.winfo_pointerx()
+        y = self.widget.winfo_pointery()
+        self.tooltip_window = tk.Toplevel(self.widget)
+        self.tooltip_window.wm_overrideredirect(True)
+        self.tooltip_window.configure(background=SkinInfo["tkinter"].get("dropdownbg", "#555555"))
+        frame = tk.Frame(
+            self.tooltip_window,
+            background=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+            relief=tk.SOLID,
+            borderwidth=1
+        )
+        frame.pack()
+        label = tk.Label(
+            frame,
+            text=text,
+            justify=tk.LEFT,
+            background=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+            foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
+            wraplength=400,
+            font=("Consolas", 8)
+        )
+        label.pack(padx=5, pady=5)
+        if 'thumbnail' in self.metadata and self.metadata['thumbnail']:
+            try:
+                image_data = self.metadata['thumbnail'].data
+                image = Image.open(BytesIO(image_data))
+                image.thumbnail((100, 100))
+                photo = ImageTk.PhotoImage(image)
+                img_label = tk.Label(frame, image=photo, background=SkinInfo["tkinter"].get("dropdownbg", "#555555"))
+                img_label.image = photo
+                img_label.pack(padx=5, pady=5)
+            except Exception as e:
+                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                    lf.write("Failed to load thumbnail image:\n")
+                    traceback.print_exc(file=lf)
+                    lf.flush()
+        self.tooltip_window.wm_geometry(f"+{x}+{y}")
+        self.mouse_listener = pynput.mouse.Listener(on_click=self.on_click)
+        self.mouse_listener.start()
+
 class BetterWMP(TkinterDnD.Tk):
     def __init__(self):
         global DEBUG, MEDIA_KEYS_ENABLED, SkinInfo
@@ -1306,8 +1439,8 @@ class BetterWMP(TkinterDnD.Tk):
         image = Image.open(BytesIO(icon_bytes))
         photo = ImageTk.PhotoImage(image)
         self.iconphoto(True, photo)
-        self.geometry("940x780")
-        self.minsize(800, 720)
+        self.geometry("1020x780")
+        self.minsize(1020, 720)
         self.playlist = []
         self.playlist_listbox = None
         self.time_last_frame = None
@@ -1335,6 +1468,8 @@ class BetterWMP(TkinterDnD.Tk):
         self.audio: AudioEngine | None = None
         self.vis: Visualizer | None = None
         self.snap: Snapshot | None = None
+        self.lufs: Lufs | None = None
+        self.stereo: Stereo | None = None
         self._fft_cache = None
         self._fft_cache_key = (None,)
         self.displayname = tk.StringVar(value="<No file>")
@@ -1394,6 +1529,8 @@ class BetterWMP(TkinterDnD.Tk):
         self._in_drag = True
         if hasattr(self, "_drag_after"):
             self.after_cancel(self._drag_after)
+        if event.widget == self:
+            self.update_idletasks()
         def end_drag():
             self._in_drag = False
         self._drag_after = self.after(120, end_drag)
@@ -1413,22 +1550,143 @@ class BetterWMP(TkinterDnD.Tk):
                 traceback.print_exc(file=lf)
                 lf.flush()
             return False
+    def _setup_metadata_tooltip(self):
+        def show_metadata_tooltip(event=None):
+            widget = event.widget
+            is_in_control = False
+            check_widget = widget
+            while check_widget:
+                if check_widget == self.control_container:
+                    is_in_control = True
+                    break
+                check_widget = check_widget.master if hasattr(check_widget, 'master') else None
+            if not is_in_control:
+                return
+            if not self.audio:
+                return
+            current_metadata = None
+            if hasattr(self, "current_wav") and self.current_wav:
+                for entry in self.playlist:
+                    if entry.get("wav") == self.current_wav:
+                        current_metadata = entry.get("metadata", {})
+                        break
+            if not current_metadata:
+                return
+            useful_fields = ['title', 'artist', 'album', 'tracknumber', 'genre', 'date', 
+                        'band', 'publisher', 'composer', 'comments', 'thumbnail']
+            has_metadata = any(current_metadata.get(field) for field in useful_fields)
+            if not has_metadata:
+                return
+            x = self.control_container.winfo_pointerx()
+            y = self.control_container.winfo_pointery()
+            tooltip_window = tk.Toplevel(self.control_container)
+            tooltip_window.wm_overrideredirect(True)
+            tooltip_window.configure(background=SkinInfo["tkinter"].get("dropdownbg", "#555555"))
+            frame = tk.Frame(
+                tooltip_window,
+                background=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+                relief=tk.SOLID,
+                borderwidth=1
+            )
+            frame.pack()
+            text = ""
+            if current_metadata.get('title'):
+                text += f"Title: {current_metadata['title']}\n"
+            if current_metadata.get('artist'):
+                text += f"Artist: {current_metadata['artist']}\n"
+            if current_metadata.get('album'):
+                text += f"Album: {current_metadata['album']}\n"
+            if current_metadata.get('tracknumber'):
+                text += f"Track Number: {current_metadata['tracknumber']}\n"
+            if current_metadata.get('genre'):
+                text += f"Genre: {current_metadata['genre']}\n"
+            if current_metadata.get('date'):
+                text += f"Year: {current_metadata['date']}\n"
+            if current_metadata.get('band'):
+                text += f"Band: {current_metadata['band']}\n"
+            if current_metadata.get('publisher'):
+                text += f"Publisher: {current_metadata['publisher']}\n"
+            if current_metadata.get('composer'):
+                text += f"Composer: {current_metadata['composer']}\n"
+            if current_metadata.get('comments'):
+                text += f"Comments: {current_metadata['comments']}\n"
+            if 'thumbnail' in current_metadata and current_metadata['thumbnail']:
+                text += "\nThumbnail:"
+            if text == "":
+                text = "No metadata available."
+            label = tk.Label(
+                frame,
+                text=text,
+                justify=tk.LEFT,
+                background=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+                foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
+                wraplength=500,
+                font=("Consolas", 8)
+            )
+            label.pack(padx=5, pady=5)
+            if 'thumbnail' in current_metadata and current_metadata['thumbnail']:
+                try:
+                    image_data = current_metadata['thumbnail'].data
+                    image = Image.open(BytesIO(image_data))
+                    image.thumbnail((100, 100))
+                    photo = ImageTk.PhotoImage(image)
+                    img_label = tk.Label(frame, image=photo, background=SkinInfo["tkinter"].get("dropdownbg", "#555555"))
+                    img_label.image = photo
+                    img_label.pack(padx=5, pady=5)
+                except Exception as e:
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write(f"Error adding thumbnail to tooltip: {e}\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
+            tooltip_window.update_idletasks()
+            tooltip_width = tooltip_window.winfo_reqwidth()
+            tooltip_height = tooltip_window.winfo_reqheight()
+            screen_width = tooltip_window.winfo_screenwidth()
+            screen_height = tooltip_window.winfo_screenheight()
+            if x + tooltip_width > screen_width - 10:
+                x = screen_width - tooltip_width - 10
+            if y + tooltip_height > screen_height - 80:
+                y = screen_height - tooltip_height - 80
+            x = max(10, x)
+            y = max(10, y)
+            tooltip_window.wm_geometry(f"+{x}+{y}")
+            def on_click(x, y, button, pressed):
+                if not pressed:
+                    return
+                try:
+                    self.after(0, lambda: tooltip_window.destroy() if tooltip_window.winfo_exists() else None)
+                    mouse_listener.stop()
+                except Exception as e:
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write(f"Error in on_click: {e}\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
+            mouse_listener = pynput.mouse.Listener(on_click=on_click)
+            mouse_listener.start()
+        self.bind("<ButtonRelease-3>", show_metadata_tooltip, add="+")
     def _build_ui(self):
         global DEBUG
         tk_colors = SkinInfo.get("tkinter", {})
         menu_font = ("Consolas", 9)
-        control_container = tk.Frame(self, bg=tk_colors.get("bg", "#1a1a1a"))
-        control_container.pack(side=tk.TOP, fill=tk.X, padx=5, pady=8)
-        play_frame = tk.Frame(control_container, bg=tk_colors.get("bg", "#1a1a1a"))
+        self.control_container = tk.Frame(self, bg=tk_colors.get("bg", "#1a1a1a"))
+        self.control_container.pack(side=tk.TOP, fill=tk.X, padx=5, pady=8)
+        self._setup_metadata_tooltip()
+        play_frame = tk.Frame(self.control_container, bg=tk_colors.get("bg", "#1a1a1a"))
         play_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(1, 10))
-        right_container = tk.Frame(control_container, bg=tk_colors.get("bg", "#1a1a1a"))
+        right_container = tk.Frame(self.control_container, bg=tk_colors.get("bg", "#1a1a1a"))
         right_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.snapshot_frame = tk.Canvas(
-            control_container, 
+            self.control_container, 
             bg=SkinInfo["fft"]["bg"],
             highlightthickness=0, borderwidth=0, width=200, height=85
         )
-        self.snapshot_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(30, 4))
+        self.snapshot_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 5))
+        self.stereoscope_frame = tk.Canvas(
+            self.control_container,
+            bg=SkinInfo["fft"]["bg"],
+            highlightthickness=0, borderwidth=0, width=85, height=85
+        )
+        self.stereoscope_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(20, 0))
         top = tk.Frame(right_container, bg=tk_colors.get("bg", "#1a1a1a"))
         top.pack(side=tk.TOP, fill=tk.X, padx=0, pady=(5, 8))
         top2 = tk.Frame(right_container, bg=tk_colors.get("bg", "#1a1a1a"))
@@ -1485,7 +1743,7 @@ class BetterWMP(TkinterDnD.Tk):
                 value=opt,
                 command=lambda v=opt: self.set_buffer(v)
             )
-        tk.Label(top, text="Zero-pad", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(38, 5))
+        tk.Label(top, text="Zero-pad", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a")).pack(side=tk.LEFT, padx=(25, 5))
         self.zp_label = tk.StringVar(value=f"{self.zp_var.get()}  ▾")
         self.zp_menu = tk.OptionMenu(top, self.zp_label, "")
         self.zp_menu.config(
@@ -1561,10 +1819,10 @@ class BetterWMP(TkinterDnD.Tk):
         )
         self.skin_btn.pack(side=tk.LEFT, padx=(2, 0))
         self.timestamp_label = tk.Label(top, text="", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a"))
-        self.timestamp_label.pack(side=tk.LEFT, padx=(43+7, 0))
+        self.timestamp_label.pack(side=tk.LEFT, padx=(20, 0))
         if DEBUG:
             self.fps_label = tk.Label(top2, text="", fg=tk_colors.get("label", "#ffffff"), bg=tk_colors.get("bg", "#1a1a1a"))
-            self.fps_label.pack(side=tk.LEFT, padx=(15+7, 0))
+            self.fps_label.pack(side=tk.LEFT, padx=(15, 0))
         self._update_nav_buttons()
         self.prog = tk.Canvas(self, height=32, background=SkinInfo["prog"]["bg"], highlightthickness=0)
         self.prog.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(4, 8))
@@ -1760,6 +2018,7 @@ class BetterWMP(TkinterDnD.Tk):
         self.playlist_listbox.bind("<Double-Button-1>", self._on_double_click)
         self.playlist_listbox.bind("<Button-1>", self._on_single_click, add="+")
         self.playlist_listbox.bind("<ButtonPress-1>", self._on_single_click, add="+")
+        self.bind("<Map>", lambda e: self.update_idletasks() if e.widget == self else None)
         self.viz = tk.Canvas(self, background=self.bg, highlightthickness=0)
         self.viz.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=8)
         style = ttk.Style()
@@ -2452,6 +2711,8 @@ class BetterWMP(TkinterDnD.Tk):
         self.audio.load_track(sr, left, right)
         self.vis = Visualizer(left, right, sr)
         self.snap = Snapshot(left, right, sr)
+        self.lufs = Lufs(left, right, sr)
+        self.stereo = Stereo(left, right, sr)
         self.displayname.set(os.path.basename(entry['orig']))
         self.title(f"BetterWMP: {self.displayname.get()}")
         self.play_btn.configure(text="▶", state="normal")
@@ -2565,7 +2826,45 @@ class BetterWMP(TkinterDnD.Tk):
                 lf.flush()
             print(f"Conversion failed: {e}")
             return
-        entry = {'orig': orig_path, 'wav': wav_path, 'name': name}
+        try:
+            metadata = {}
+            _audio = mutagen.File(orig_path)
+            if not (_audio and hasattr(_audio, 'tags')):
+                metadata = {}
+            else:
+                metadata = {
+                    'title': str(_audio.tags.get('TIT2', [os.path.splitext(name)[0]])[0]) if 'TIT2' in _audio.tags else None,
+                    'artist': str(_audio.tags.get('TPE1', [None])[0]) if 'TPE1' in _audio.tags else None,
+                    'album': str(_audio.tags.get('TALB', [None])[0]) if 'TALB' in _audio.tags else None,
+                    'tracknumber': str(_audio.tags.get('TRCK', [None])[0]) if 'TRCK' in _audio.tags else None,
+                    'genre': str(_audio.tags.get('TCON', [None])[0]) if 'TCON' in _audio.tags else None,
+                    'date': str(_audio.tags.get('TDRC', [None])[0]) if 'TDRC' in _audio.tags else None,
+                    'band': str(_audio.tags.get('TPE2', [None])[0]) if ('TPE2' in _audio.tags and _audio.tags.get('TPE2') != _audio.tags.get('TPE1')) else None,
+                    'publisher': str(_audio.tags.get('TPUB', [None])[0]) if 'TPUB' in _audio.tags else None,
+                    'composer': str(_audio.tags.get('TCOM', [None])[0]) if 'TCOM' in _audio.tags else None,
+                    'comments': None,
+                    'thumbnail': None
+                }
+                if hasattr(_audio.tags, 'keys'):
+                    for tag_key in _audio.tags.keys():
+                        if str(tag_key).lower().startswith('apic:'):
+                            thumbnail_data = _audio.tags.get(tag_key)
+                            if thumbnail_data is not None:
+                                metadata['thumbnail'] = thumbnail_data
+                            break
+                    for tag_key in _audio.tags.keys():
+                        if str(tag_key).lower().startswith('comm:'):
+                            comments_data = _audio.tags.get(tag_key)
+                            if comments_data is not None:
+                                metadata['comments'] = str(comments_data)
+                            break
+        except:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Metadata extraction failed:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+            metadata = {}
+        entry = {'orig': orig_path, 'wav': wav_path, 'name': name, 'metadata': metadata}
         if insert_at is None:
             self.playlist.append(entry)
             self.playlist_listbox.insert(tk.END, name)
@@ -2608,7 +2907,10 @@ class BetterWMP(TkinterDnD.Tk):
             self.viz.delete("all")
             self.vis = None
             self.snap = None
-            self.snapshot_frame.delete("all") 
+            self.lufs = None
+            self.stereo = None
+            self.snapshot_frame.delete("all")
+            self.stereoscope_frame.delete("all")
             self.play_btn.configure(text="▶", state="disabled")
             self.title("BetterWMP: <No file>")
             self._update_nav_buttons()
@@ -2653,49 +2955,25 @@ class BetterWMP(TkinterDnD.Tk):
             title="Insert files",
             filetypes=[ALL_FORMATS_EXPLORER]
         )
+        if not files:
+            return
         idxs = self.playlist_listbox.curselection()
         insert_at = idxs[0] + 1 if idxs else len(self.playlist)
-        try:
-            for f in files:
+        def worker():
+            self.show_progress_window(len(files))
+            current_insert = insert_at
+            for i, f in enumerate(files, start=1):
                 if os.path.isfile(f):
-                    name = os.path.basename(f)
-                    wav_path = os.path.join(self.appdata_dir, f"{int(time.time()*1000)}_{name}.wav")
-                    ffmpeg_exe = AudioSegment.converter or "ffmpeg"
-                    cmd = [
-                        ffmpeg_exe,
-                        "-y",
-                        "-i", f,
-                        "-vn",
-                        "-acodec", "pcm_s16le",
-                        "-ar", f"{SAMPLERATE_PREF or 44100}",
-                        "-ac", "2",
-                        wav_path
-                    ]
-                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                        lf.write(f"Converting file with command: {'; '.join(cmd)}\n")
-                        lf.flush()
-                    try:
-                        subprocess.run(cmd, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    except Exception as e:
-                        print(f"Conversion failed: {e}")
-                        with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                            lf.write("Conversion failed:\n")
-                            traceback.print_exc(file=lf)
-                            lf.flush()
-                        continue
-                    entry = {'orig': f, 'wav': wav_path, 'name': name}
-                    self.playlist.insert(insert_at, entry)
-                    self.playlist_listbox.insert(insert_at, name)
-                    insert_at += 1
+                    self.add_file_to_playlist(f, insert_at=current_insert)
+                    current_insert += 1
+                self.after(0, lambda i=i, f=f: self.update_progress(i, len(files), os.path.basename(f)))
+            self.after(0, self.close_progress_window)
             if files:
-                self.playlist_listbox.selection_clear(0, tk.END)
-                self.playlist_listbox.selection_set(insert_at - 1)
-        except Exception as e:
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("Insert failed:\n")
-                traceback.print_exc(file=lf)
-                lf.flush()
-            print(e)
+                self.after(0, lambda: self.playlist_listbox.selection_clear(0, tk.END))
+                self.after(0, lambda: self.playlist_listbox.selection_set(current_insert - 1))
+            self._update_nav_buttons()
+            self._highlight_loaded()
+        threading.Thread(target=worker, daemon=True).start()
         self._update_nav_buttons()
         self._highlight_loaded()
     def _playlist_up(self):
@@ -2811,9 +3089,11 @@ class BetterWMP(TkinterDnD.Tk):
                 self.title("BetterWMP: <No file>")
                 self.vis = None
                 self.snap = None
+                self.lufs = None
+                self.stereo = None
                 self.viz.delete("all")
                 self.snapshot_frame.delete("all") 
-                self.snap.delete()
+                self.stereoscope_frame.delete("all")
                 self.current_wav = None
                 self._highlight_loaded()
                 self._fft_cache = None
@@ -2851,8 +3131,11 @@ class BetterWMP(TkinterDnD.Tk):
         self.displayname.set("<No file>")
         self.vis = None
         self.snap = None
+        self.lufs = None
+        self.stereo = None
         self.viz.delete("all")
-        self.snapshot_frame.delete("all") 
+        self.snapshot_frame.delete("all")
+        self.stereoscope_frame.delete("all")
         self.play_btn.configure(state="disabled")
         self.title("BetterWMP: <No file>")
         self._highlight_loaded()
@@ -3049,6 +3332,15 @@ class BetterWMP(TkinterDnD.Tk):
             )
             if t is None or amplitude is None or len(amplitude) == 0:
                 return
+            lufs_value = None
+            if self.lufs is not None:
+                try:
+                    lufs_value = self.lufs.calculate_lufs_at_time(self.display_time)
+                except Exception:
+                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                        lf.write("LUFS calculation failed:\n")
+                        traceback.print_exc(file=lf)
+                        lf.flush()
             max_points = min(200, w)
             if len(amplitude) > max_points:
                 step = len(amplitude) // max_points
@@ -3081,18 +3373,102 @@ class BetterWMP(TkinterDnD.Tk):
                     width=1,
                     smooth=False
                 )
-            if f0 and f0 > 20:
+            if self.lufs and lufs_value is not None:
                 self.snapshot_frame.create_text(
-                    w - 5, 5,
+                    w - 5, 0,
                     anchor='ne',
                     fill=SkinInfo["fft"]["text"],
-                    text=f"{f0:.0f} Hz" if DEBUG else "",
+                    text=f"{lufs_value:.2f} LU" if lufs_value > -80 else "",
                     font=("Consolas", 8)
                 )
             self._snapshot_cache_key = current_key
         except Exception:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write("Exception in snapshot drawing:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+    def _draw_stereoscope(self):
+        if self.audio is None or self.stereo is None:
+            self.stereoscope_frame.delete("all")
+            return
+        try:
+            w = max(10, int(self.stereoscope_frame.winfo_width()))
+            h = max(10, int(self.stereoscope_frame.winfo_height()))
+            current_key = (w, h, round(self.display_time, 2))
+            self.stereoscope_frame.delete("all")
+            x, y = self.stereo.scope(self.display_time, duration = 0.05)
+            if x is None or y is None or len(x) == 0 or len(y) == 0:
+                return
+            max_points = min(200, w)
+            if len(x) > max_points:
+                step = len(x) // max_points
+                x = x[::step]
+                y = y[::step]
+            center_x = w / 2.0
+            center_y = h / 2.0
+            size = min(w, h)
+            half_size = size / 2.0
+            diamond_points = [
+                center_x, center_y - half_size, 
+                center_x + half_size, center_y,
+                center_x, center_y + half_size,
+                center_x - half_size, center_y,
+                center_x, center_y - half_size
+            ]
+            inner_diamond_points = [
+                center_x, center_y - half_size / 2, 
+                center_x + half_size / 2, center_y,
+                center_x, center_y + half_size / 2,
+                center_x - half_size / 2, center_y,
+                center_x, center_y - half_size / 2
+            ]
+            self.stereoscope_frame.create_line(
+                diamond_points,
+                fill=SkinInfo["fft"]["line"],
+                width=1
+            )
+            self.stereoscope_frame.create_line(
+                inner_diamond_points,
+                fill=SkinInfo["fft"]["line"],
+                width=1
+            )
+            self.stereoscope_frame.create_line(
+                center_x, center_y - half_size,
+                center_x, center_y + half_size,
+                fill=SkinInfo["fft"]["line"],
+                width=1
+            )
+            self.stereoscope_frame.create_line(
+                center_x - half_size, center_y,
+                center_x + half_size, center_y,
+                fill=SkinInfo["fft"]["line"],
+                width=1
+            )
+            left_diag_len = half_size / 2
+            self.stereoscope_frame.create_line(
+                center_x - left_diag_len, center_y + left_diag_len,
+                center_x + left_diag_len, center_y - left_diag_len,
+                fill=SkinInfo["fft"]["line"],
+                width=1
+            )
+            self.stereoscope_frame.create_line(
+                center_x + left_diag_len, center_y + left_diag_len,
+                center_x - left_diag_len, center_y - left_diag_len,
+                fill=SkinInfo["fft"]["line"],
+                width=1
+            )
+            for i in range(len(x)):
+                px = center_x + (x[i] * half_size)
+                py = center_y - (y[i] * half_size)
+                self.stereoscope_frame.create_oval(
+                    px - 1, py - 1,
+                    px + 1, py + 1,
+                    fill=self.mid_color,
+                    outline=self.mid_color
+                )
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Exception in stereoscope drawing:\n")
                 traceback.print_exc(file=lf)
                 lf.flush()
     def _update_loop(self):
@@ -3222,6 +3598,8 @@ class BetterWMP(TkinterDnD.Tk):
                             self._draw_spectrum(freqs, mid_db, side_db)
                             if self.snap is not None:
                                 self._draw_snapshot()
+                            if self.stereo is not None:
+                                self._draw_stereoscope()
                 except Exception:
                     with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                         lf.write("Exception in spectrum drawing:\n")
