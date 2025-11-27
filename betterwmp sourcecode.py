@@ -615,7 +615,8 @@ class SettingsMenu(tk.Toplevel):
     def __init__(self, parent):
         global MEDIA_KEYS_ENABLED, SAMPLERATE_PREF
         super().__init__(parent)
-        window_dimensions = (538, 640)
+        self.parent = parent
+        window_dimensions = (538, 805)
         menu_font = ("Consolas", 9)
         self.title("BetterWMP Settings")
         self.geometry(f"{window_dimensions[0]}x{window_dimensions[1]}")
@@ -623,6 +624,8 @@ class SettingsMenu(tk.Toplevel):
         parent_y = parent.winfo_rooty()
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
+        self.gain_var = tk.IntVar(value=getattr(self.parent, "session_gain", 0))
+        self._gain_dragging = False
         new_x = max(0, min(parent_x + 50, screen_width - window_dimensions[0]))
         new_y = max(0, min(parent_y + 50, screen_height - window_dimensions[1] - 135))
         self.geometry(f"+{new_x}+{new_y}")
@@ -630,7 +633,6 @@ class SettingsMenu(tk.Toplevel):
         self.configure(bg=SkinInfo["tkinter"].get("bg", "#333333"))
         self.transient(parent)
         self.grab_set()
-        self.parent = parent
         tk.Label(
             self, text="BetterWMP Settings",
             fg=SkinInfo["tkinter"].get("label", "#ffffff"),
@@ -888,6 +890,69 @@ class SettingsMenu(tk.Toplevel):
             self.apply_button.configure(state="normal")
             self.apply_button.update_idletasks()
             # self.destroy()
+        tk.Label(
+            self, text="Signal Gain (dB):",
+            fg=SkinInfo["tkinter"].get("label", "#ffffff"),
+            bg=SkinInfo["tkinter"].get("bg", "#333333")
+        ).pack(fill="x", padx=(10, 10), pady=(10, 10))
+        self.gain_var = tk.IntVar(value=getattr(self.parent, "session_gain", 0))
+        def on_gain_press(event):
+            self._gain_dragging = True
+        def on_gain_release(event):
+            self._gain_dragging = False
+            val = self.gain_var.get()
+            try:
+                self.parent.session_gain = val
+                self.parent.set_gain(val)
+            except Exception:
+                pass
+        def update_gain_label(val):
+            try:
+                val = int(float(val))
+            except Exception:
+                val = int(self.gain_var.get() or 0)
+            sign = "+" if val > 0 else ""
+            self.gain_percentage_label.config(text=f"{sign}{val} dB")
+            if self._gain_dragging:
+                try:
+                    self.parent.session_gain = val
+                except Exception:
+                    pass
+        self.gain_slider = tk.Scale(
+            self, from_=-72, to=36, orient="horizontal",
+            variable=self.gain_var, length=200,
+            fg=SkinInfo["tkinter"].get("label", "#ffffff"),
+            highlightthickness=0,
+            troughcolor=SkinInfo["prog"].get("bg", "#1a1a1a"),
+            activebackground=SkinInfo["prog"].get("thumb", "#d88aff"),
+            sliderrelief="flat",
+            borderwidth=0, showvalue=0,
+            sliderlength=20, resolution=1,
+            command=lambda v: update_gain_label(v)
+        )
+        self.gain_slider.bind("<ButtonPress-1>", on_gain_press)
+        self.gain_slider.bind("<ButtonRelease-1>", on_gain_release)
+        self.gain_slider.pack(fill="x", padx=(10, 10), pady=(0, 5))
+        gain_percentage_frame = tk.Frame(self, bg=SkinInfo["tkinter"].get("bg", "#333333"))
+        gain_percentage_frame.pack(fill="x", padx=(10, 10), pady=(0, 0))
+        self.gain_percentage_label = tk.Label(
+            gain_percentage_frame,
+            text=f"+{self.gain_var.get()} dB" if self.gain_var.get() >= 0 else f"{self.gain_var.get()} dB",
+            fg=SkinInfo["tkinter"].get("label", "#ffffff"),
+            bg=SkinInfo["tkinter"].get("bg", "#333333")
+        )
+        self.gain_percentage_label.pack(fill="x")
+        self.gain_var.trace_add("write", lambda *_: update_gain_label(self.gain_var.get()))
+        def save_gain_setting():
+            with open(prefs_path, "r", encoding="utf-8") as f:
+                existing_prefs = json.load(f)
+            existing_prefs["gain"] = self.gain_var.get()
+            with open(prefs_path, "w", encoding="utf-8") as f:
+                json.dump(existing_prefs, f, indent=2)
+        ttk.Button(
+            self, text="Save Gain Setting",
+            command=save_gain_setting, style="Flat.TButton", takefocus=False
+        ).pack(fill="x", padx=(10, 10), pady=(5, 20))
         self.apply_button.configure(command=apply_output_device)
         tk.Label(
             self, text="Playback Volume:",
@@ -941,7 +1006,7 @@ class SettingsMenu(tk.Toplevel):
         ttk.Button(
             self, text="Save Volume Setting",
             command=save_volume_setting, style="Flat.TButton", takefocus=False
-        ).pack(fill="x", padx=(10, 10), pady=(5, 10))
+        ).pack(fill="x", padx=(10, 10), pady=(5, 20))
         tk.Label(
             self, text="Change Skin:",
             fg=SkinInfo["tkinter"].get("label", "#ffffff"),
@@ -1085,8 +1150,8 @@ class SettingsMenu(tk.Toplevel):
     def get_hostapi_list(self):
         apis = []
         try:
-            count = sd.query_hostapis()["hostapi_count"]
-            apis = [sd.query_hostapis(i)["name"] for i in range(count)]
+            hostapis = sd.query_hostapis()
+            apis = [hostapis[i]["name"] for i in range(len(hostapis))]
         except Exception:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write("Failed to get host API list:\n")
@@ -1252,8 +1317,6 @@ class Snapshot:
             if start_sample < 0:
                 pad_length = abs(start_sample)
                 start_sample = 0
-                if start_sample + N_analysis >= len(x):
-                    return None, None, 0.0
                 analysis_seg_raw = x[start_sample:start_sample + N_analysis]
                 analysis_seg_raw = np.pad(analysis_seg_raw, (pad_length, 0), mode='constant', constant_values=0)
             elif start_sample + N_analysis >= len(x):
@@ -1270,7 +1333,7 @@ class Snapshot:
                 analysis_seg_raw = x[start_sample:start_sample + N_analysis]
             analysis_seg_filtered = self.lowpass_filter(analysis_seg_raw)
             f0, significance = self.estimate_dominant_freq_autocorr(analysis_seg_filtered)
-            if f0 is None or f0 < 20 or f0 > 500 or significance < 0.1:
+            if f0 is None or f0 < 20 or f0 > 500 or significance < 0.1 or start_sample + N_analysis >= len(x):
                 offset = 0
             else:
                 seg_filtered = analysis_seg_filtered[:N_display]
@@ -1357,71 +1420,6 @@ class Visualizer:
                 points.append((x, int(y)))
         return points
 
-class MetadataTag:
-    def __init__(self, widget, metadata):
-        print("MetadataTag initialized")
-        self.widget = widget
-        self.metadata = metadata
-        self.tooltip_window = None
-        self.mouse_listener = None
-        self.widget.bind("<ButtonRelease-3>", self.on_right_click)
-    def on_right_click(self, event=None):
-        print("Right click detected")
-        self.show_tooltip()
-    def on_click(self, x, y, button, pressed):
-        print(f"Global click: pressed={pressed}, has_tooltip={self.tooltip_window is not None}")
-        if not pressed or not self.tooltip_window:
-            return
-        try:
-            self.widget.after(0, self.hide_tooltip)
-        except Exception as e:
-            print(f"Error in on_click: {e}")
-    def show_tooltip(self):
-        print("show_tooltip called")
-        if self.tooltip_window:
-            print("Tooltip already exists, returning")
-            return
-        text = self.format_metadata()
-        x = self.widget.winfo_pointerx()
-        y = self.widget.winfo_pointery()
-        self.tooltip_window = tk.Toplevel(self.widget)
-        self.tooltip_window.wm_overrideredirect(True)
-        self.tooltip_window.configure(background=SkinInfo["tkinter"].get("dropdownbg", "#555555"))
-        frame = tk.Frame(
-            self.tooltip_window,
-            background=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
-            relief=tk.SOLID,
-            borderwidth=1
-        )
-        frame.pack()
-        label = tk.Label(
-            frame,
-            text=text,
-            justify=tk.LEFT,
-            background=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
-            foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
-            wraplength=400,
-            font=("Consolas", 8)
-        )
-        label.pack(padx=5, pady=5)
-        if 'thumbnail' in self.metadata and self.metadata['thumbnail']:
-            try:
-                image_data = self.metadata['thumbnail'].data
-                image = Image.open(BytesIO(image_data))
-                image.thumbnail((100, 100))
-                photo = ImageTk.PhotoImage(image)
-                img_label = tk.Label(frame, image=photo, background=SkinInfo["tkinter"].get("dropdownbg", "#555555"))
-                img_label.image = photo
-                img_label.pack(padx=5, pady=5)
-            except Exception as e:
-                with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                    lf.write("Failed to load thumbnail image:\n")
-                    traceback.print_exc(file=lf)
-                    lf.flush()
-        self.tooltip_window.wm_geometry(f"+{x}+{y}")
-        self.mouse_listener = pynput.mouse.Listener(on_click=self.on_click)
-        self.mouse_listener.start()
-
 class BetterWMP(TkinterDnD.Tk):
     def __init__(self):
         global DEBUG, MEDIA_KEYS_ENABLED, SkinInfo
@@ -1448,6 +1446,20 @@ class BetterWMP(TkinterDnD.Tk):
         shutil.rmtree(self.appdata_dir, ignore_errors=True)
         os.makedirs(self.appdata_dir, exist_ok=True)
         self.title("BetterWMP")
+        self.session_gain = 0
+        try:
+            conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
+            prefs_path = os.path.join(conf_dir, "userprefs.conf")
+            if os.path.isfile(prefs_path):
+                with open(prefs_path, "r", encoding="utf-8") as pf:
+                    prefs = json.load(pf)
+                    self.session_gain = int(prefs.get("gain", 0))
+        except Exception:
+            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
+                lf.write("Failed to read gain from prefs at startup:\n")
+                traceback.print_exc(file=lf)
+                lf.flush()
+        self.gain_linear = 10.0 ** (self.session_gain / 20.0)
         self.session_volume = 100
         try:
             conf_dir = os.path.expandvars(r"%localappdata%\betterwmpconf")
@@ -1581,15 +1593,16 @@ class BetterWMP(TkinterDnD.Tk):
             y = self.control_container.winfo_pointery()
             tooltip_window = tk.Toplevel(self.control_container)
             tooltip_window.wm_overrideredirect(True)
-            tooltip_window.configure(background=SkinInfo["tkinter"].get("dropdownbg", "#555555"))
+            tooltip_window.configure(background=SkinInfo["tkinter"].get("bg", "#333333"))
             frame = tk.Frame(
                 tooltip_window,
-                background=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
+                background=SkinInfo["tkinter"].get("bg", "#333333"),
                 relief=tk.SOLID,
                 borderwidth=1
             )
             frame.pack()
             text = ""
+            has_thumbnail = False
             if current_metadata.get('title'):
                 text += f"Title: {current_metadata['title']}\n"
             if current_metadata.get('artist'):
@@ -1611,24 +1624,24 @@ class BetterWMP(TkinterDnD.Tk):
             if current_metadata.get('comments'):
                 text += f"Comments: {current_metadata['comments']}\n"
             if 'thumbnail' in current_metadata and current_metadata['thumbnail']:
-                text += "\nThumbnail:"
-            if text == "":
-                text = "No metadata available."
+                has_thumbnail = True
+            if text == "" and has_thumbnail == False:
+                return
             label = tk.Label(
                 frame,
                 text=text,
                 justify=tk.LEFT,
-                background=SkinInfo["tkinter"].get("dropdownbg", "#555555"),
-                foreground=SkinInfo["tkinter"].get("dropdownfg", "#ffffff"),
-                wraplength=500,
+                background=SkinInfo["tkinter"].get("bg", "#333333"),
+                foreground=SkinInfo["tkinter"].get("label", "#ffffff"),
+                wraplength=400,
                 font=("Consolas", 8)
             )
-            label.pack(padx=5, pady=5)
+            label.pack(padx=5, pady=5, anchor='nw', side=tk.LEFT)
             if 'thumbnail' in current_metadata and current_metadata['thumbnail']:
                 try:
                     image_data = current_metadata['thumbnail'].data
                     image = Image.open(BytesIO(image_data))
-                    image.thumbnail((100, 100))
+                    image.thumbnail((200, 200))
                     photo = ImageTk.PhotoImage(image)
                     img_label = tk.Label(frame, image=photo, background=SkinInfo["tkinter"].get("dropdownbg", "#555555"))
                     img_label.image = photo
@@ -2288,6 +2301,27 @@ class BetterWMP(TkinterDnD.Tk):
                 lf.write("NOT MY FAULT\n")
                 lf.flush()
             raise RuntimeError("User requested the crash.")
+    def set_gain(self, gain_db: float):
+        self.session_gain = gain_db
+        self.gain_linear = 10.0 ** (gain_db / 20.0)
+        if self.audio is not None and hasattr(self, '_last_loaded_left'):
+            was_playing = self.audio.is_playing()
+            current_time = self.audio.current_seconds()
+            left = self._last_loaded_left * self.gain_linear
+            right = self._last_loaded_right * self.gain_linear
+            left = np.clip(left, -1.0, 1.0)
+            right = np.clip(right, -1.0, 1.0)
+            sr = self._last_loaded_sr
+            self.audio.load_track(sr, left, right)
+            self.audio.seek_seconds(current_time)
+            if was_playing:
+                self.audio.play()
+            self.vis = Visualizer(left, right, sr)
+            self.snap = Snapshot(left, right, sr)
+            self.lufs = Lufs(left, right, sr)
+            self.stereo = Stereo(left, right, sr)
+            self._fft_cache = None
+            self._fft_cache_key = (None,)
     def set_volume(self, vol_percent):
         if self.audio:
             self.audio.set_volume(vol_percent)
@@ -2562,19 +2596,6 @@ class BetterWMP(TkinterDnD.Tk):
                         traceback.print_exc(file=lf)
                         lf.flush()
             try:
-                '''
-                try:
-                    if device_pref is not None:
-                        device_info = sd.query_devices(device_pref)
-                        self.sr = int(device_info.get("default_samplerate", sr))
-                    else:
-                        self.sr = sr
-                except Exception as e:
-                    with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                        lf.write("Failed to get sample rate of the device:\n")
-                        traceback.print_exc(file=lf)
-                        lf.flush()
-                '''
                 self.sr = sr
                 self.audio = AudioEngine(self.sr, device=device_pref)
                 self.audio.on_track_end = self._handle_track_end
@@ -2708,6 +2729,14 @@ class BetterWMP(TkinterDnD.Tk):
                 if not fallback_ok:
                     self.audio = None
                     return
+        self._last_loaded_left = left.copy()
+        self._last_loaded_right = right.copy()
+        self._last_loaded_sr = sr
+        if hasattr(self, 'gain_linear'):
+            left = left * self.gain_linear
+            right = right * self.gain_linear
+            left = np.clip(left, -1.0, 1.0)
+            right = np.clip(right, -1.0, 1.0)
         self.audio.load_track(sr, left, right)
         self.vis = Visualizer(left, right, sr)
         self.snap = Snapshot(left, right, sr)
@@ -2829,35 +2858,53 @@ class BetterWMP(TkinterDnD.Tk):
         try:
             metadata = {}
             _audio = mutagen.File(orig_path)
-            if not (_audio and hasattr(_audio, 'tags')):
+            if _audio is None:
                 metadata = {}
             else:
+                tags = getattr(_audio, "tags", {}) or {}
+                def first_tag(*keys):
+                    for k in keys:
+                        v = tags.get(k)
+                        if v:
+                            # mutagen returns lists for many formats
+                            try:
+                                return v[0] if isinstance(v, (list, tuple)) else str(v)
+                            except Exception:
+                                return str(v)
+                    return None
                 metadata = {
-                    'title': str(_audio.tags.get('TIT2', [os.path.splitext(name)[0]])[0]) if 'TIT2' in _audio.tags else None,
-                    'artist': str(_audio.tags.get('TPE1', [None])[0]) if 'TPE1' in _audio.tags else None,
-                    'album': str(_audio.tags.get('TALB', [None])[0]) if 'TALB' in _audio.tags else None,
-                    'tracknumber': str(_audio.tags.get('TRCK', [None])[0]) if 'TRCK' in _audio.tags else None,
-                    'genre': str(_audio.tags.get('TCON', [None])[0]) if 'TCON' in _audio.tags else None,
-                    'date': str(_audio.tags.get('TDRC', [None])[0]) if 'TDRC' in _audio.tags else None,
-                    'band': str(_audio.tags.get('TPE2', [None])[0]) if ('TPE2' in _audio.tags and _audio.tags.get('TPE2') != _audio.tags.get('TPE1')) else None,
-                    'publisher': str(_audio.tags.get('TPUB', [None])[0]) if 'TPUB' in _audio.tags else None,
-                    'composer': str(_audio.tags.get('TCOM', [None])[0]) if 'TCOM' in _audio.tags else None,
-                    'comments': None,
-                    'thumbnail': None
+                    "title": first_tag("TITLE", "TIT2", "\xa9nam"),
+                    "artist": first_tag("ARTIST", "TPE1", "\xa9ART"),
+                    "album": first_tag("ALBUM", "TALB", "\xa9alb"),
+                    "tracknumber": first_tag("TRACKNUMBER", "TRCK", "TRACK"),
+                    "genre": first_tag("GENRE", "TCON"),
+                    "date": first_tag("DATE", "TDRC", "\xa9day", "YEAR"),
+                    "band": first_tag("BAND", "TPE2") if first_tag("BAND", "TPE2") != first_tag("ARTIST", "TPE1", "\xa9ART") else None,
+                    "publisher": first_tag("PUBLISHER", "TPUB") if first_tag("PUBLISHER", "TPUB") != first_tag("ARTIST", "TPE1", "\xa9ART") else None,
+                    "composer": first_tag("COMPOSER", "TCOM") if first_tag("COMPOSER", "TCOM") != first_tag("ARTIST", "TPE1", "\xa9ART") else None,
+                    "comments": first_tag("COMMENT", "COMM", "DESCRIPTION"),
+                    "thumbnail": None
                 }
-                if hasattr(_audio.tags, 'keys'):
-                    for tag_key in _audio.tags.keys():
-                        if str(tag_key).lower().startswith('apic:'):
-                            thumbnail_data = _audio.tags.get(tag_key)
-                            if thumbnail_data is not None:
-                                metadata['thumbnail'] = thumbnail_data
-                            break
-                    for tag_key in _audio.tags.keys():
-                        if str(tag_key).lower().startswith('comm:'):
-                            comments_data = _audio.tags.get(tag_key)
-                            if comments_data is not None:
-                                metadata['comments'] = str(comments_data)
-                            break
+                if hasattr(_audio, "pictures") and getattr(_audio, "pictures"):
+                    try:
+                        metadata["thumbnail"] = _audio.pictures[0]
+                    except Exception:
+                        metadata["thumbnail"] = None
+                elif isinstance(_audio, mutagen.mp3.MP3):
+                    for k in list(tags.keys()):
+                        if str(k).lower().startswith("apic"):
+                            apic = tags.get(k)
+                            if apic:
+                                metadata["thumbnail"] = apic
+                                break
+                elif hasattr(_audio, "tags") and "covr" in tags:
+                    covr = tags.get("covr")
+                    if covr:
+                        metadata["thumbnail"] = covr[0] if isinstance(covr, (list, tuple)) else covr
+                elif "METADATA_BLOCK_PICTURE" in tags:
+                    pic = tags.get("METADATA_BLOCK_PICTURE")
+                    if pic:
+                        metadata["thumbnail"] = pic
         except:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write("Metadata extraction failed:\n")
@@ -3326,7 +3373,7 @@ class BetterWMP(TkinterDnD.Tk):
                 return
             self.snapshot_frame.delete("all")
             t, amplitude, f0 = self.snap.get_rephased_segment(
-                self.display_time - 0.075,
+                self.display_time - 0.06,
                 display_duration=0.05,
                 analysis_duration=0.20
             )
@@ -3394,12 +3441,11 @@ class BetterWMP(TkinterDnD.Tk):
         try:
             w = max(10, int(self.stereoscope_frame.winfo_width()))
             h = max(10, int(self.stereoscope_frame.winfo_height()))
-            current_key = (w, h, round(self.display_time, 2))
             self.stereoscope_frame.delete("all")
-            x, y = self.stereo.scope(self.display_time, duration = 0.05)
+            x, y = self.stereo.scope(self.display_time // 0.02 * 0.02, duration = 0.04)
             if x is None or y is None or len(x) == 0 or len(y) == 0:
                 return
-            max_points = min(200, w)
+            max_points = min(400, w)
             if len(x) > max_points:
                 step = len(x) // max_points
                 x = x[::step]
@@ -3678,7 +3724,6 @@ def setup_skin_json():
                     lf.flush()
             pf.write("default.bwmpskin")
     if not os.path.isfile(skin_path):
-        # print("Reset")
         with open(FAULT_LOG, "a", encoding="utf-8") as lf:
             lf.write("Skin reset to default.\n")
             lf.flush()
