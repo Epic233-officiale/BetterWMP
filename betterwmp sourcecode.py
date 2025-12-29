@@ -400,7 +400,7 @@ class AudioEngine:
         return self._playing.is_set()
     def set_volume(self, vol_percent: float):
         # with self._lock:
-        if self._lock.acquire(timeout=1.0):
+        with self._lock:
             try:
                 self.volume = np.clip(vol_percent / 100.0, 0.0, 1.0)
             except Exception as e:
@@ -409,13 +409,6 @@ class AudioEngine:
                     lf.write("AudioEngine set_volume failed:\n")
                     traceback.print_exc(file=lf)
                     lf.flush()
-            finally:
-                self._lock.release()
-        else:
-            self._lock.release()
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("AudioEngine set_volume: Failed to acquire lock within timeout.\n")
-                lf.flush()
     def _callback(self, outdata, frames, time_info, status):
         global runframes, unplug_flag, callbackFlag
         if status:
@@ -425,7 +418,7 @@ class AudioEngine:
                 lf.flush()
             callbackFlag = True if "underflow" in str(status).lower() else False
         # with self._lock:
-        if self._lock.acquire(timeout=1.0):
+        if self._lock.acquire(blocking=False):
             try:
                 idx, n = self.idx, self.n
                 left, right = self.left, self.right
@@ -442,10 +435,6 @@ class AudioEngine:
             finally:
                 self._lock.release()
         else:
-            self._lock.release()
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("AudioEngine callback: Failed to acquire lock within timeout.\n")
-                lf.flush()
             outdata.fill(0)
             return
         if not self._playing.is_set():
@@ -483,7 +472,7 @@ class AudioEngine:
         return self._playing.is_set()
     def seek_seconds(self, t):
         # with self._lock:
-        if self._lock.acquire(timeout=1.0):
+        with self._lock:
             try:
                 self.idx = int(t * self.sr)
                 if hasattr(self, 'on_seek'):
@@ -497,13 +486,6 @@ class AudioEngine:
                     lf.write("AudioEngine seek_seconds failed:\n")
                     traceback.print_exc(file=lf)
                     lf.flush()
-            finally:
-                self._lock.release()
-        else:
-            self._lock.release()
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("AudioEngine seek_seconds: Failed to acquire lock within timeout.\n")
-                lf.flush()
     def current_seconds(self):
         return self.idx / float(self.sr)
     def duration_seconds(self):
@@ -514,7 +496,7 @@ class AudioEngine:
         right = right.astype(np.float32, copy=False)
         self.pause()
         # with self._lock:
-        if self._lock.acquire(timeout=1.0):
+        with self._lock:
             try:
                 self.sr = sr
                 self.left = left
@@ -527,13 +509,6 @@ class AudioEngine:
                     lf.write("AudioEngine load_track failed:\n")
                     traceback.print_exc(file=lf)
                     lf.flush()
-            finally:
-                self._lock.release()
-        else:
-            self._lock.release()
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("AudioEngine load_track: Failed to acquire lock within timeout.\n")
-                lf.flush()
         if self._crash_simulation:
             self._stream.stop()
             self._stream.close()
@@ -1511,6 +1486,8 @@ class BetterWMP(TkinterDnD.Tk):
         self.fg = SkinInfo["fft"]["fg"]
         self.mid_color = SkinInfo["fft"]["mid"]
         self.side_color = SkinInfo["fft"]["side"]
+        self._cached_window_size = (0, 0)
+        self._cached_is_minimized = False
         self._build_ui()
         self._force_pump()
         self._last_frame_time = time.perf_counter()
@@ -1543,6 +1520,7 @@ class BetterWMP(TkinterDnD.Tk):
             self.after_cancel(self._drag_after)
         if event.widget == self:
             self.update_idletasks()
+            self._update_minimized_cache()
         def end_drag():
             self._in_drag = False
         self._drag_after = self.after(120, end_drag)
@@ -1553,15 +1531,17 @@ class BetterWMP(TkinterDnD.Tk):
                 ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
                 ctypes.windll.user32.DispatchMessageW(ctypes.byref(msg))
             self.after(8, self._force_pump)
-    def _is_minimized(self) -> bool:
+    def _update_minimized_cache(self):
         try:
-            return (self.state() == 'iconic') or (not self.winfo_viewable())
+            self._cached_is_minimized = (self.state() == 'iconic') or (not self.winfo_viewable())
         except Exception:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("Read minimization state failed:\n")
+                lf.write("Update minimization cache failed:\n")
                 traceback.print_exc(file=lf)
                 lf.flush()
-            return False
+    
+    def _is_minimized(self) -> bool:
+        return self._cached_is_minimized
     def _setup_metadata_tooltip(self):
         def show_metadata_tooltip(event=None):
             widget = event.widget
@@ -2031,9 +2011,11 @@ class BetterWMP(TkinterDnD.Tk):
         self.playlist_listbox.bind("<Double-Button-1>", self._on_double_click)
         self.playlist_listbox.bind("<Button-1>", self._on_single_click, add="+")
         self.playlist_listbox.bind("<ButtonPress-1>", self._on_single_click, add="+")
-        self.bind("<Map>", lambda e: self.update_idletasks() if e.widget == self else None)
+        self.bind("<Map>", lambda e: self._update_minimized_cache() if e.widget == self else None)
+        self.bind("<Unmap>", lambda e: self._update_minimized_cache() if e.widget == self else None)
         self.viz = tk.Canvas(self, background=self.bg, highlightthickness=0)
         self.viz.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=8)
+        self.viz.bind("<Configure>", self._on_viz_resize)
         style = ttk.Style()
         style.theme_use("clam")
         style.configure('Custom.TMenubutton',
@@ -2043,20 +2025,15 @@ class BetterWMP(TkinterDnD.Tk):
             activebackground=SkinInfo["tkinter"].get("dropdownactivebg", "#685868"),
             activeforeground=SkinInfo["tkinter"].get("dropdownactivefg", "#ffffff")
         )
+    def _on_viz_resize(self, event):
+        try:
+            self._cached_window_size = (event.width, event.height)
+        except Exception:
+            pass
     def _get_window_size(self):
         if self._is_minimized():
             return 0, 0
-        try:
-            self.update_idletasks()
-            width = self.viz.winfo_width()
-            height = self.viz.winfo_height()
-            return width, height
-        except Exception:
-            with open(FAULT_LOG, "a", encoding="utf-8") as lf:
-                lf.write("Failed to get window size:\n")
-                traceback.print_exc(file=lf)
-                lf.flush()
-            return 0, 0
+        return self._cached_window_size
     def _context_copy_file(self):
         try:
             idx = None
@@ -2732,7 +2709,7 @@ class BetterWMP(TkinterDnD.Tk):
         self._last_loaded_left = left.copy()
         self._last_loaded_right = right.copy()
         self._last_loaded_sr = sr
-        if hasattr(self, 'gain_linear'):
+        if hasattr(self, 'gain_linear') and round(self.gain_linear, 6) != 1.0:
             left = left * self.gain_linear
             right = right * self.gain_linear
             left = np.clip(left, -1.0, 1.0)
@@ -3520,6 +3497,7 @@ class BetterWMP(TkinterDnD.Tk):
     def _update_loop(self):
         global runframes, EmergencyStop, unplug_flag, DEBUG, callbackFlag
         t0 = time.perf_counter()
+        a = []
         try:
             current_time = t0
             if DEBUG:
@@ -3541,6 +3519,7 @@ class BetterWMP(TkinterDnD.Tk):
                             if runframes - 20 > self._fault_timer:
                                 callbackFlag = False
             if not EmergencyStop:
+                tt0 = time.time()
                 if self.unplug_backup:
                     try:
                         if self.audio is None:
@@ -3579,6 +3558,7 @@ class BetterWMP(TkinterDnD.Tk):
                     if a == 1:
                         messagebox.showerror("BetterWMP","The audio stream is stuck (e.g. due to unplugged earphones). \nBetterWMP will attempt to connect to the last device.")
                     unplug_flag = 0
+                tt1 = time.time()
                 if self.audio is not None:
                     was_playing = self.audio.is_playing()
                     if self.is_dragging:
@@ -3599,10 +3579,13 @@ class BetterWMP(TkinterDnD.Tk):
                 else:
                     if DEBUG:
                         self.fps_label.config(text=f"FPS: {self._fps:.1f}")
+                tt2 = time.time()
                 if self._pending_seek is not None:
                     self.audio.seek_seconds(self._pending_seek)
                     self._pending_seek = None
+                tt3 = time.time()
                 self._draw_progress()
+                tt4 = time.time()
                 try:
                     if self.triggered_pause:
                         if self.audio is not None and self.audio.is_playing() and not self.play_btn.instate(['disabled']):
@@ -3615,18 +3598,32 @@ class BetterWMP(TkinterDnD.Tk):
                         traceback.print_exc(file=lf)
                         lf.flush()
                     self.triggered_pause = False
+                tt5 = time.time()
+                a.append([round(tt1-tt0, 3), round(tt2-tt1, 3), round(tt3-tt2, 3), round(tt4-tt3, 3), round(tt5-tt4, 3)])
                 try:
                     if self.vis is not None and self.audio is not None and not self._is_minimized():
+                        ttt0 = time.time()
+                        tttt0 = time.time()
+                        c0 = getattr(self, "current_wav", None)
+                        tttt1 = time.time()
+                        c1 = self.audio.idx
+                        tttt2 = time.time()
+                        c2 = float(self.display_time)
+                        tttt3 = time.time()
+                        c3 = self.buffer_var.get()
+                        tttt4 = time.time()
+                        c4 = self.zp_var.get()
+                        tttt5 = time.time()
+                        c5 = self.audio.device
+                        tttt6 = time.time()
+                        c6 = self._media_press_count
+                        tttt7 = time.time()
+                        c7 = self._get_window_size()
+                        tttt8 = time.time()
                         current_key = (
-                            getattr(self, "current_wav", None), 
-                            self.audio.idx,
-                            float(self.display_time), 
-                            self.buffer_var.get(), 
-                            self.zp_var.get(), 
-                            self.audio.device,
-                            self._media_press_count,
-                            self._get_window_size(),
+                            c1, c2, c3, c4, c5, c6, c7
                         )
+                        a.append([round(tttt1-tttt0, 3), round(tttt2-tttt1, 3), round(tttt3-tttt2, 3), round(tttt4-tttt3, 3), round(tttt5-tttt4, 3), round(tttt6-tttt5, 3), round(tttt7-tttt6, 3), round(tttt8-tttt7, 3)])
                         if not (self._fft_cache_key == current_key and self._fft_cache is not None):
                             buffer_n = int(self.buffer_var.get())
                             zp = int(self.zp_var.get())
@@ -3640,12 +3637,18 @@ class BetterWMP(TkinterDnD.Tk):
                             side_db = side_db[mask]
                             self._fft_cache = (freqs, mid_db, side_db)
                             self._fft_cache_key = current_key
+                            ttt1 = time.time()
                             self._draw_axes()
+                            ttt2 = time.time()
                             self._draw_spectrum(freqs, mid_db, side_db)
+                            ttt3 = time.time()
                             if self.snap is not None:
                                 self._draw_snapshot()
+                            ttt4 = time.time()
                             if self.stereo is not None:
                                 self._draw_stereoscope()
+                            ttt5 = time.time()
+                            a.append([round(ttt1-ttt0, 3), round(ttt2-ttt1, 3), round(ttt3-ttt2, 3), round(ttt4-ttt3, 3), round(ttt5-ttt4, 3)])
                 except Exception:
                     with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                         lf.write("Exception in spectrum drawing:\n")
@@ -3665,6 +3668,7 @@ class BetterWMP(TkinterDnD.Tk):
             print(f"Error in update loop: {e}")
             pass
         try:
+            tt6 = time.time()
             self._highlight_loaded()
             if runframes % 3 == 0:
                 if not (self.audio is not None and self.audio.is_playing() and self.audio.current_seconds() == self.time_last_frame):
@@ -3680,10 +3684,15 @@ class BetterWMP(TkinterDnD.Tk):
                     self.time_last_frame = None
             if runframes % 7 == 0:
                 self._update_nav_buttons()
+                #if DEBUG: print("Updating nav buttons")
             if runframes % 83 == 0:
                 self.bind("<Map>", lambda e: self.drop_target_register(DND_FILES))
+                #if DEBUG: print("Re-registering DND")
             if runframes % 293 == 0:
                 self.drop_target_register(DND_FILES)
+                #if DEBUG: print("Re-registering DND (long)")
+            tt7 = time.time()
+            a.append([round(tt7-tt6, 3)])
         except Exception:
             with open(FAULT_LOG, "a", encoding="utf-8") as lf:
                 lf.write("Exception in periodic tasks:\n")
@@ -3692,10 +3701,19 @@ class BetterWMP(TkinterDnD.Tk):
             pass
         t1 = time.perf_counter()
         elapsed_ms = (t1 - t0) * 1000.0
+        """
+        print(elapsed_ms)
+        if elapsed_ms > 20:
+            if DEBUG: 
+                print(a)
+        t9 = time.perf_counter() 
+        """
         if self._is_minimized():
             delay_minuend = 100
         else:
             delay_minuend = 16
+        t10 = time.perf_counter()
+        # if t10 - t9 > 0.001: print(round(t10 - t9, 3))
         delay = max(0, int(delay_minuend - elapsed_ms))
         runframes += 1
         self.after(delay, self._update_loop)
